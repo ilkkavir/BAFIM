@@ -1,10 +1,10 @@
-function [apriori2,apriorierror2] = apriorimodel_bafim(apriori,apriorierror,heights,fit_altitude)
+function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorierror,heights,fit_altitude)
 %
 %
-% [apriori2,apriorierror2] = apriorimodel_bafim(apriori,apriorierror,heights)
+% [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorierror,heights)
 %
 % Bayesian filtering in time and correlation priors in range direction for Ne, Ti, Tr, Vi, and composition.
-%
+% Ion composition is updated with the flipchem model in each prediction step.
 %
 % NOTICE: the whole BAFIM package, including this function, ionomodel_bafim, and the modified ionomodel-function must be in the MATLAB search path
 %
@@ -66,11 +66,22 @@ function [apriori2,apriorierror2] = apriorimodel_bafim(apriori,apriorierror,heig
 %           step (0 if the fit is ok)
 % d_time    timestap from the raw data
     
-    global r_param r_error r_res r_status d_time path_GUP result_path v_Boltzmann v_amu
+    global r_param r_error r_res r_status d_time path_GUP result_path v_Boltzmann v_amu p_XMITloc
+
+
+    % flipchem model error standar deviation
+    flipchem_modErr_std = .1;%.05;
+
+    % step length in finite difference gradient calculations
+    dx = .001;
     
     % We need to pass some variables from one timestep to another
     persistent d_time_prev aprioriprev apriorierrorprev filename istep
 
+
+    r_param_orig = r_param;
+    r_error_orig = r_error;
+    
     % Lowest & highest altitudes for fits from the input array
     hlimNe = fit_altitude(1,1:2);
     hlimTi = fit_altitude(2,1:2);
@@ -122,7 +133,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim(apriori,apriorierror,heig
     if istep==2
         % copy the prior model in the output directory to help in development work
         % copy only on the second step to be sure that result_path has been properly parsed
-        copyfile(which('apriorimodel_bafim.m'),fullfile(result_path,'apriorimodel_bafim.m'));
+        copyfile(which('apriorimodel_bafim_flipchem.m'),fullfile(result_path,'apriorimodel_bafim_flipchem.m'));
     end
 
     
@@ -140,23 +151,16 @@ function [apriori2,apriorierror2] = apriorimodel_bafim(apriori,apriorierror,heig
     apriori2 = apriori;
     apriorierror2 = apriorierror;
 
-    % if this is not the first time step
-    if istep>1
+    % if this is not the first time step (either from experiment startup of after a long data gap)
+    if istep>1 & tstep < 600
         
         % Replace unreasonable values with the previous predictions. 
         for hind = 1:nhei
-            % if ~any(r_status(hind)==[0 3]) | any(isnan(r_param(hind,1:6))) | ...
-            %         r_res(hind,1)>100 | any(r_param(hind,1:5)<paramlims(1,1:5)) | ...
-            %         any(r_param(hind,1:5)>paramlims(2,1:5))
-
-            %     r_param(hind,1:6) = aprioriprev(hind,1:6);
-            %     r_error(hind,1:6) = apriorierrorprev(hind,1:6);
-            %     r_error(hind,7:end) = 0;
-            % end
+            
             okfit = true;
 
             % obviously erroneous fits
-            if ~any(r_status(hind)==[0 3]) | any(isnan(r_param(hind,1:6))) | ...
+            if ~any(r_status(hind)==[0 3]) | any(isnan(r_param(hind,1:6))) | any(isnan(r_error(hind,:))) |...
                     r_res(hind,1)>100 | any(r_param(hind,1:5)<paramlims(1,1:5)) | ...
                     any(r_param(hind,1:5)>paramlims(2,1:5))
                 okfit = false;
@@ -198,13 +202,247 @@ function [apriori2,apriorierror2] = apriorimodel_bafim(apriori,apriorierror,heig
                 r_error(hind,7:end) = 0;
             end
         end
+
+        % % exclude weak echoes on the top side
+        % if nhei > 5
+        %     iweak = nhei+1
+        %     while any(r_param((iweak-5):(iweak-1),1)<5e10)
+        %         iweak = iweak - 1;
+        %         if iweak == 6
+        %             break
+        %         end
+        %     end
+        %     if iweak <= nhei
+        %         for hind = iweak:nhei
+        %             if heights(hind)>hlimNe(1) & heights(hind)<hlimNe(2)
+        %                 r_error(hind,1) = 1e12;
+        %             end
+        %             if heights(hind)>hlimTi(1) & heights(hind)<hlimTi(2)
+        %                 r_error(hind,2) = 5000;
+        %             end
+        %             if heights(hind)>hlimTr(1) & heights(hind)<hlimTr(2)
+        %                 r_error(hind,3) = 5;
+        %             end
+        %             if heights(hind)>hlimVi(1) & heights(hind)<hlimVi(2)
+        %                 r_error(hind,5) = 1e3;
+        %             end
+        %             if heights(hind)>hlimOp(1) & heights(hind)<hlimOp(2)
+        %                 r_error(hind,6) = .1;
+        %             end
+        %             r_error(hind,7:end) = 0;
+        %             r_status(hind) = 6;
+        %         end
+        %     end
+        %     disp(iweak)
+        % end
+
+        r_param_orig_cleaned = r_param;
+        r_error_orig_cleaned = r_error;
+        r_param_orig_cleaned_s = real_to_scaled(r_param);
+        r_error_orig_cleaned_s = real_to_scaled(r_error);
         
         % Convert to scaled units
         r_param_s = real_to_scaled(r_param);
         r_error_s = real_to_scaled(r_error);
         apriori_s = real_to_scaled(apriori);
         apriorierror_s = real_to_scaled(apriorierror);
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % update composition with flipchem %
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        %
+        % Fit all parameters with an additional penalty for deviations from the flipchem composition
+        %
+        % call flipchem directly from the python module
+        %
 
+        
+        timetmp = datetime(d_time(2,:));
+        pydate = py.datetime.datetime(int32(timetmp.Year),int32(timetmp.Month),int32(timetmp.Day),int32(timetmp.Hour),int32(timetmp.Minute));
+        glat = p_XMITloc(1);
+        glon = p_XMITloc(2);
+        fc = py.flipchem.Flipchem(pydate);
+        O2p = r_param(:,1).*NaN;
+        NOp = r_param(:,1).*NaN;
+
+        % fms options...
+        fms_opts = optimset('fminsearch');
+        % fms_opts.Display = 'off';
+        % fms_opts.MaxFunEvals=1e4;
+        % fms_opts.MaxIter=1e6;
+        % fms_opts.TolFun=1e-8;
+        % fms_opts.TolX=1e-8;
+        
+        for hind = 1:nhei
+
+            % altitude
+            galt = heights(hind);
+
+            % correct only if we fit composition in this gate
+            if heights(hind)>hlimOp(1) & heights(hind)<hlimOp(2)
+
+                % skip the composition update if something fails
+                try
+                    
+                    % the error covariance matrix from previous time step (in scaled units)
+                    covmat = vec2covm(r_error_s(hind,:));
+                    
+                    % the parameters that were actually fitted
+                    fitpar = diag(covmat) ~= 0;
+                    ifitpar = find(fitpar);
+                    
+                    % a new fit with penalty from deviation from flipchem
+                    [x,fval,exitflag,output] = fminsearch( @(p) SS_flipchem( p , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc ) , r_param_orig_cleaned_s(hind,fitpar) , fms_opts);
+                    
+                    % update the parameter vector
+                    r_param_s(hind,fitpar) = x;
+                    r_param(hind,:) = scaled_to_real(r_param_s(hind,:));
+                    
+                    
+                    %%%%%%%%%%%%%%%%%%%%
+                    % error estimation %
+                    %%%%%%%%%%%%%%%%%%%%
+                    
+                    % number of parameters we actually fit
+                    nparam = sum(fitpar);
+                    
+                    % initialize the Hessian matrix
+                    Hess = zeros(nparam,nparam);
+                    
+                    % sum of squares at the iteration convergence point
+                    SS0 = SS_flipchem( r_param_s(hind,fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc);
+                    
+                    % Diagonal of the hessian
+                    for k=1:nparam
+                        
+                        % +dx
+                        r_param_tmp = r_param_s(hind,:);
+                        r_param_tmp(ifitpar(k)) = r_param_tmp(ifitpar(k)) + dx;
+                        Hess(k,k) = Hess(k,k) + SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc); 
+                        
+                        % -dx
+                        r_param_tmp = r_param_s(hind,:);
+                        r_param_tmp(ifitpar(k)) = r_param_tmp(ifitpar(k)) - dx;
+                        Hess(k,k) = Hess(k,k) + SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc);
+                        
+                        % the centre and scaling
+                        Hess(k,k) = (Hess(k,k) - 2*SS0) / dx^2;
+                        
+                    end
+                    
+                    % the off-diagonal elements
+                    for k=1:(nparam-1)
+                        
+                        for l=(k+1):nparam
+                            
+                            % +dx+dx
+                            r_param_tmp = r_param_s(hind,:);
+                            r_param_tmp(ifitpar(k)) = r_param_tmp(ifitpar(k)) + dx;
+                            r_param_tmp(ifitpar(l)) = r_param_tmp(ifitpar(l)) + dx;
+                            Hess(k,l) = Hess(k,l) + SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc); 
+                            
+                            % +dx-dx
+                            r_param_tmp = r_param_s(hind,:);
+                            r_param_tmp(ifitpar(k)) = r_param_tmp(ifitpar(k)) + dx;
+                            r_param_tmp(ifitpar(l)) = r_param_tmp(ifitpar(l)) - dx;
+                            Hess(k,l) = Hess(k,l) - SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc); 
+                            
+                            % -dx+dx
+                            r_param_tmp = r_param_s(hind,:);
+                            r_param_tmp(ifitpar(k)) = r_param_tmp(ifitpar(k)) - dx;
+                            r_param_tmp(ifitpar(l)) = r_param_tmp(ifitpar(l)) + dx;
+                            Hess(k,l) = Hess(k,l) - SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc); 
+                            
+                            % -dx-dx
+                            r_param_tmp = r_param_s(hind,:);
+                            r_param_tmp(ifitpar(k)) = r_param_tmp(ifitpar(k)) - dx;
+                            r_param_tmp(ifitpar(l)) = r_param_tmp(ifitpar(l)) - dx;
+                            Hess(k,l) = Hess(k,l) + SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc); 
+                            
+                            Hess(k,l) = Hess(k,l)/(4*dx^2);
+                            Hess(l,k) = Hess(k,l);
+                            
+                        end
+                    end
+                    
+                    % regularize a bit if there are unrealistic values (this happens very rarely but would crash the analysis)
+                    % disperrs = false;
+                    while any(diag(Hess)<=0)
+                        %                    disp('negative in Hess matrix diagonal')
+                        Hess = Hess + eye(nparam);
+                        disperrs = true;
+                    end
+                    
+                    % inverse of the Hessian matrix
+                    invhess = inv(Hess);
+                    
+                    % The diagonal should be positive, regularize if it is not (again, very rare)
+                    while(any(diag(invhess)<=0))
+                        %                    disp('negative in covariance matrix diagonal')
+                        Hess = Hess + eye(nparam);
+                        invhess = inv(Hess);
+                        disperrs = true;
+                    end
+                    
+                    % covariance matrix of all parameters
+                    covmat2 = covmat;
+                    
+                    % error covariance = inv(2*Hess), the remaining elements of covmat2 are not affected
+                    covmat2(fitpar,fitpar) = invhess*2;
+                    
+                    % convert the covariance matrix into the vector format used in guisdap
+                    r_error_s(hind,:) = covm2vec(covmat2);
+                    r_error_old = r_error; % copy of the old error vector for the disp below...
+                                           % the vector format in real units
+                    r_error(hind,:) = scaled_to_real(r_error_s(hind,:));
+                    % if disperrs
+                    %                disp(r_error_old(hind,1:6))
+                    %                disp(r_error(hind,1:6))
+                    % end
+
+                    % final check that everything is ok after the flipchem fit
+                    if any(any(isnan(covmat)))
+                        error('NaN in covariance matrix, skipping the flipchem fit.');
+                    end
+                    if any(any(diag(covmat)<0))
+                        error('Negative variance, skipping the flipchem fit.');
+                    end
+                    if any(isnan(r_error(hind,:)))
+                        error('NaN standard deviation, skipping the flipchem fit.');
+                    end
+                    if any(r_error(hind,:)<0)
+                        error('Negative standard deviation, skipping the flipchem fit'.);
+                    end
+
+                    % if the flipchem fit fails we continue with the guisdap fit results
+                catch
+                    ;
+                end
+
+            end
+            
+            try
+                % the molecular ions
+                outputs = fc.get_point(glat,glon,galt,r_param(hind,1),r_param(hind,2)*r_param(hind,3),r_param(hind,2));
+                O2p(hind) = outputs{5}/r_param(1);
+                NOp(hind) = outputs{6}/r_param(1);
+                if isnan(O2p(hind)) | isnan(NOp(hind))
+                    error('NaN compositio, skipping the flipchem fit');
+                end
+            catch
+                ;
+            end
+            
+        end
+
+
+
+
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%
+        %%  smoohing in altitude ##
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+        
         % at least 3 gates are needed for smoothing in range
         if nhei > 2
             
@@ -318,32 +556,42 @@ function [apriori2,apriorierror2] = apriorimodel_bafim(apriori,apriorierror,heig
         ViCorr = Xpost((3*nhei+1):(4*nhei));
         OpCorr = Xpost((4*nhei+1):(5*nhei));
         
-        % Standard deviations
+        % Standard deviations. NOTICE: we could pick the full covariance matrices at each height!
         NeErrCorr = sqrt(diag(Cpost(1:nhei,1:nhei)));
         TiErrCorr = sqrt(diag(Cpost((nhei+1):(2*nhei),(nhei+1):(2*nhei))));
         TrErrCorr = sqrt(diag(Cpost((2*nhei+1):(3*nhei),(2*nhei+1):(3*nhei))));
         ViErrCorr = sqrt(diag(Cpost((3*nhei+1):(4*nhei),(3*nhei+1):(4*nhei))));
         OpErrCorr = sqrt(diag(Cpost((4*nhei+1):(5*nhei),(4*nhei+1):(5*nhei))));
+
                 
         % Convert the prediction back to physical units
         partmp = scaled_to_real([NeCorr(:),TiCorr(:),TrCorr(:),r_param_s(:,4),ViCorr(:),OpCorr(:)]);
         errtmp = scaled_to_real([NeErrCorr(:),TiErrCorr(:),TrErrCorr(:),r_error_s(:,4),ViErrCorr(:),OpErrCorr(:)]);
-        
-        % Copy the smoothed profiles to the final prior matrix
-        apriori2(:,1) = partmp(:,1);
-        apriori2(:,2) = partmp(:,2);
-        apriori2(:,3) = partmp(:,3);
-        apriori2(:,5) = partmp(:,5);
-        apriori2(:,6) = partmp(:,6);
-        
-        % The final prior variances
-        apriorierror2(:,1) = errtmp(:,1) + tsNe*sqrt(tstep);
-        apriorierror2(:,2) = errtmp(:,2) + tsTi*sqrt(tstep);
-        apriorierror2(:,3) = errtmp(:,3) + tsTr*sqrt(tstep);
-        apriorierror2(:,4) = 0;
-        apriorierror2(:,5) = errtmp(:,5) + tsVi*sqrt(tstep);
-        apriorierror2(:,6) = errtmp(:,6) + tsOp*sqrt(tstep);
 
+        % skip the smoothing if the values are insane
+        if ~any(any(isnan(partmp))) & ~any(any(isnan(errtmp))) & all(all(imag(partmp)==0)) & all(all(imag(errtmp)==0)) & ~any(any(errtmp<0))
+            
+            % Copy the smoothed profiles to the final prior matrix
+            apriori2(:,1) = partmp(:,1);
+            apriori2(:,2) = partmp(:,2);
+            apriori2(:,3) = partmp(:,3);
+            apriori2(:,5) = partmp(:,5);
+            apriori2(:,6) = partmp(:,6);
+            
+            % The final prior variances
+            apriorierror2(:,1) = errtmp(:,1) + tsNe*sqrt(tstep);
+            apriorierror2(:,2) = errtmp(:,2) + tsTi*sqrt(tstep);
+            apriorierror2(:,3) = errtmp(:,3) + tsTr*sqrt(tstep);
+            apriorierror2(:,4) = 0;
+            apriorierror2(:,5) = errtmp(:,5) + tsVi*sqrt(tstep);
+            apriorierror2(:,6) = errtmp(:,6) + tsOp*sqrt(tstep);
+
+        else
+            % if something failed and the smoothed profiles were not copied, we need to use covariance matrices of the unsmoothed data
+            Cpost = Cfit;
+            Qpost = Qfit;
+            
+        end
         
         % boundary conditions
         for ihei = 1:nhei
@@ -379,7 +627,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim(apriori,apriorierror,heig
         predvars = scaledprederr(:,[1 2 3 5 6]).^2;
         BAFIM_G = Cfit * (Cpost * Qfit)' * diag( 1./predvars(:));
 
-        % copy the smoothed parameters in matrices that are appended to the data files
+        % copy the parameters smoothed in altitude in matrices that are appended to the data files
         r_param_rcorr = r_param;
         r_param_rcorr(:,1:6) = partmp(:,1:6);
         r_error_rcorr = r_error;
@@ -387,14 +635,17 @@ function [apriori2,apriorierror2] = apriorimodel_bafim(apriori,apriorierror,heig
         r_param_filter = r_param;
         r_error_filter = r_error;
 
+
         % write the matrix G and the smoothed parameters in the GUISDAP output file.
-        % Write also r_param and r_error, since they might have changed if there were failed fits.
-        % Write an identical copy of r_param and r_error in r_param_filter and r_error_filter.
+        % Write also r_param and r_error, since they have changed in the flipchem fit.
+        % Write an identical copy of r_param and r_error in r_param_filter and r_error_filter.        
         outfile = fullfile(result_path,filename);
-        save(outfile,'BAFIM_G','r_param','r_error','r_param_filter','r_error_filter','r_param_rcorr','r_error_rcorr','-append');
+        save(outfile,'BAFIM_G','r_param','r_error','r_status','r_param_filter','r_error_filter','r_param_rcorr','r_error_rcorr','O2p','NOp','-append');
+
+
         
     else
-        % Prior for the very first time step from the IRI model. apriori2 already contains the IRI parameters, just form the error array here. 
+        % Prior for the very first time step or after a long data gap from the IRI model. apriori2 already contains the IRI parameters, just form the error array here. 
         
         % Ne
         apriorierror2(:,1) = tsNe*sqrt(tstep);
@@ -418,7 +669,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim(apriori,apriorierror,heig
         apriorierror2(:,6) = tsOp*sqrt(tstep);
         apriorierror2(heights<hlimOp(1),6) = 1e-3;
         apriorierror2(heights>hlimOp(2),6) = 1e-3;
-        
+
     end
     
     % make sure that the prior values are within our limits, this should rarely have any effect
@@ -439,7 +690,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim(apriori,apriorierror,heig
     istep = istep + 1;
     
     % Let the user know which prior is being used
-    disp('apriorimodel_bafim')
+    disp('apriorimodel_bafim_flipchem')
     
 end
 
