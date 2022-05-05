@@ -411,7 +411,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                         error('NaN standard deviation, skipping the flipchem fit.');
                     end
                     if any(r_error(hind,:)<0)
-                        error('Negative standard deviation, skipping the flipchem fit'.);
+                        error('Negative standard deviation, skipping the flipchem fit.');
                     end
 
                     % if the flipchem fit fails we continue with the guisdap fit results
@@ -427,7 +427,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                 O2p(hind) = outputs{5}/r_param(1);
                 NOp(hind) = outputs{6}/r_param(1);
                 if isnan(O2p(hind)) | isnan(NOp(hind))
-                    error('NaN compositio, skipping the flipchem fit');
+                    error('NaN compositio, skipping the flipchem fit.');
                 end
             catch
                 ;
