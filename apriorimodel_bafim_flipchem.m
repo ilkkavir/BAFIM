@@ -68,6 +68,8 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
     
     global r_param r_error r_res r_status d_time path_GUP result_path v_Boltzmann v_amu p_XMITloc
 
+    % merge outputs in one large file if true, set to false for the normal guisdap output files
+    merge_output_files = false;
 
     % flipchem model error standar deviation
     flipchem_modErr_std = .1;%.05;
@@ -643,6 +645,10 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         save(outfile,'BAFIM_G','r_param','r_error','r_status','r_param_filter','r_error_filter','r_param_rcorr','r_error_rcorr','O2p','NOp','-append');
 
 
+        % merge the guisdap output files into one large file to avoid too many files...
+        if merge_output_files
+            merge_mat(result_path,true,true);
+        end
         
     else
         % Prior for the very first time step or after a long data gap from the IRI model. apriori2 already contains the IRI parameters, just form the error array here. 

@@ -19,9 +19,28 @@ function bafim_smoother( datadir )
 
     persistent r_param_smooth_next r_error_smooth_next r_apriori_next r_apriorierror_next
 
-    df = dir(fullfile(datadir,'*.mat'));
+    if isdir(datadir)
+        df = dir(fullfile(datadir,'*.mat'));
+        nf  = length(df);
+        merfedfile = false;
+    else
+        fnames = sort(fieldnames(matfile(datadir)));
+        l = 1;
+        flist = [];
+        for k=1:length(fnames)
+            fname = char(fnames(k));
+            if length(fname)==12
+                if fname(1:4)=='data'
+                    flist(l).file = str2num(fname(5:12));
+                    flist(l).fname = fullfile(fileparts(datadir),[fname(5:12) '.mat']);
+                    l = l+1;
+                end
+            end
+        end
+        nf = length(flist); 
+        mergedfile = true;
+    end
 
-    nf  = length(df);
 
     % physically reasonable limits for the plasma parameters
     paramlims = [1e6 1 .01 1 -2e4 -.01 ; 1e14 2e4 100 1e9 2e4 1.01];
@@ -32,8 +51,13 @@ function bafim_smoother( datadir )
         end
         
         % read the data
-        dfpath = fullfile(datadir,df(k).name);
-        dd = load(dfpath);
+        if ~mergedfile
+            dfpath = fullfile(datadir,df(k).name);
+            dd = load(dfpath);
+        else
+            fname = ['data' flist(k).fname((end-11):(end-4))];
+            dd = getfield(load(datadir,fname),fname);
+        end
 
         % number of height gates (actually, the present version cannot handle changes in nhei)
         nhei = length(dd.r_h);
@@ -129,9 +153,27 @@ function bafim_smoother( datadir )
 
         r_param = r_param_smooth;
         r_error = r_error_smooth;
-        save(dfpath,'r_param','r_param_smooth','r_param_filter','r_error','r_error_smooth','r_error_filter','-append');
 
-        fprintf("\r %s",dfpath)
+        if ~mergedfile
+            save(dfpath,'r_param','r_param_smooth','r_param_filter','r_error','r_error_smooth','r_error_filter','-append');
+            fprintf("\r %s",dfpath)
+        else
+            dd.r_param = r_param;
+            dd.r_param_smooth = r_param_smooth;
+            dd.r_param_filter = r_param_filter;
+            dd.r_error = r_error;
+            dd.r_error_smooth = r_error_smooth;
+            dd.r_error_filter = r_error_filter;
+
+            structname = sprintf('data%08d',flist(k).file);
+            eval([structname '=dd;']);
+
+            save(datadir,structname,'-append')
+
+            fprintf("\r %08d",flist(k).file)
+
+        end
+
         
     end
 
