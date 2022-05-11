@@ -642,7 +642,23 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         % Write also r_param and r_error, since they have changed in the flipchem fit.
         % Write an identical copy of r_param and r_error in r_param_filter and r_error_filter.        
         outfile = fullfile(result_path,filename);
-        save(outfile,'BAFIM_G','r_param','r_error','r_status','r_param_filter','r_error_filter','r_param_rcorr','r_error_rcorr','O2p','NOp','-append');
+
+        savesuccess = false;
+        itry = 0;
+        while ~savesuccess
+            savesuccess = true;
+            try
+                save(outfile,'BAFIM_G','r_param','r_error','r_status','r_param_filter','r_error_filter','r_param_rcorr','r_error_rcorr','O2p','NOp','-append');
+            catch
+                savesuccess = false;
+                itry = itry + 1;
+                pause(5);
+                if itry > 12
+                    error(['cannot write to file ' outfile])
+                end
+            end
+        end
+        disp(itry)
 
 
         % merge the guisdap output files into one large file to avoid too many files...
