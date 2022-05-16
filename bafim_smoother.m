@@ -1,4 +1,4 @@
-function bafim_smoother( datadir )
+function bafim_smoother( datadir , mergedfile )
 %
 % bafim_smoother( datadir )
 %
@@ -6,7 +6,8 @@ function bafim_smoother( datadir )
 %
 %
 % INPUT:
-%   datadir   a GUISDAP output directory with BAFIM fit results
+%   datadir     a GUISDAP output directory with BAFIM fit results
+%   mergedfile  true if the input data merged guisdap output files, false for normal guisdap files
 %
 % OUTPUT:
 %             none, the smoothed results are appended to the original output files
@@ -19,30 +20,57 @@ function bafim_smoother( datadir )
 
     persistent r_param_smooth_next r_error_smooth_next r_apriori_next r_apriorierror_next
 
-    if isdir(datadir)
-        df = dir(fullfile(datadir,'*.mat'));
-        nf  = length(df);
-        merfedfile = false;
-    else
-        fnames = sort(fieldnames(matfile(datadir)));
+    if nargin < 2
+        mergedfile = false;
+    end
+    
+    % if isdir(datadir)
+    %     df = dir(fullfile(datadir,'*.mat'));
+    %     nf  = length(df);
+    %     merfedfile = false;
+    % else
+    %     fnames = sort(fieldnames(matfile(datadir)));
+    %     l = 1;
+    %     flist = [];
+    %     for k=1:length(fnames)
+    %         fname = char(fnames(k));
+    %         if length(fname)==12
+    %             if fname(1:4)=='data'
+    %                 flist(l).file = str2num(fname(5:12));
+    %                 flist(l).fname = fullfile(fileparts(datadir),[fname(5:12) '.mat']);
+    %                 l = l+1;
+    %             end
+    %         end
+    %     end
+    %     nf = length(flist); 
+    %     mergedfile = true;
+    % end
+
+    if mergedfile
+        % file nams of the merged files must start with "GUISDAP"
+        df = dir(fullfile(datadir,'GUISDAP*.mat'));
         l = 1;
         flist = [];
-        for k=1:length(fnames)
-            fname = char(fnames(k));
-            if length(fname)==12
-                if fname(1:4)=='data'
-                    flist(l).file = str2num(fname(5:12));
-                    flist(l).fname = fullfile(fileparts(datadir),[fname(5:12) '.mat']);
-                    l = l+1;
+        for ifile=1:length(df)
+            % the file names should be properly ordered by dir
+            fnames = sort(fieldnames(matfile(fullfile(df(ifile).folder,df(ifile).name))));
+            for k=1:length(fnames)
+                fname = char(fnames(k));
+                if length(fname)==12
+                    if fname(1:4)=='data'
+                        flist(l).file = str2num(fname(5:12));
+                        flist(l).fname = fullfile(datadir,[fname(5:12) '.mat']);
+                        flist(l).mergedfname = df(ifile).name;
+                        l = l+1;
+                    end
                 end
             end
         end
-        nf = length(flist); 
-        mergedfile = true;
-        % [path1,file1,ext1] = fileparts(datadir);
-        % datadir2 = fullfile(path1,[file1 '_smooth.mat'])
+        nf = l-1;
+    else
+        df = dir(fullfile(datadir,'*.mat'));
+        nf  = length(df);
     end
-
 
     % physically reasonable limits for the plasma parameters
     paramlims = [1e6 1 .01 1 -2e4 -.01 ; 1e14 2e4 100 1e9 2e4 1.01];
@@ -51,14 +79,14 @@ function bafim_smoother( datadir )
         if k==nf
             addpath(fullfile(path_GUP,'init'))
         end
-        
+
         % read the data
         if ~mergedfile
             dfpath = fullfile(datadir,df(k).name);
             dd = load(dfpath);
         else
             fname = ['data' flist(k).fname((end-11):(end-4))];
-            dd = getfield(load(datadir,fname),fname);
+            dd = getfield(load(fullfile(datadir,flist(k).mergedfname),fname),fname);
         end
 
         % number of height gates (actually, the present version cannot handle changes in nhei)
@@ -161,6 +189,8 @@ function bafim_smoother( datadir )
             fprintf("\r %s",dfpath)
         else
 
+            % this is slow even with one-hour files. Should we first save individual files and then merge them?
+            % -- may work otherwise, but would need to make sure that too many files do not exist at the same time
             dd.r_param = r_param;
             dd.r_param_smooth = r_param_smooth;
             dd.r_param_filter = r_param_filter;
@@ -170,22 +200,24 @@ function bafim_smoother( datadir )
 
             structname = sprintf('data%08d',flist(k).file);
             eval([structname '=dd;']);
+            save(fullfile(datadir,flist(k).mergedfname),structname,'-append')
 
-            save(datadir,structname,'-append')
-            % if k==nf
-            %     save(datadir2,structname)
-            % else
-            %     save(datadir2,structname,'-append')
-            % end            
+            % dfpath = fullfile(datadir,flist(k).fname);
+            % save(dfpath,'-struct','dd')
 
+            
             fprintf("\r %08d",flist(k).file)
+            %            fprintf("\r %s",dfpath)
 
         end
 
         
+        
     end
 
 
-
+    % if mergedfile
+    %     merge_mat(datadir,false,true)
+    % end
 
 end

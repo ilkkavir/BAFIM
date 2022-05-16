@@ -38,7 +38,7 @@ function [success mergefile] = merge_mat(guisdapdir,append,delfiles)
     end
     dirparts = strsplit(odir,filesep);
     
-    mergefile = fullfile( odir , [char(dirparts(end)) '_merged.mat'] );
+    %    mergefile = fullfile( odir , [char(dirparts(end)) '_merged.mat'] );
 
     % list the proper output files using guisdap getfilelist
     try
@@ -48,9 +48,14 @@ function [success mergefile] = merge_mat(guisdapdir,append,delfiles)
         return;
     end
 
+    prevhour = -1;
+
     for ifile = 1:length(guisdapfiles)
         try
             tmp = load(guisdapfiles(ifile).fname);
+            % a file name for the hourly files. Must change also the append options below.. 
+            mergefile = fullfile(odir,['GUISDAP-' strrep(char(dirparts(end)),'@','_') '-' datestr(datetime(tmp.r_time(2,:)),'YYYYmmDD_HH') '.mat']);
+            curhour = tmp.r_time(2,4);
         catch
             success = 2;
             return
@@ -58,7 +63,7 @@ function [success mergefile] = merge_mat(guisdapdir,append,delfiles)
         structname = sprintf('data%08d',guisdapfiles(ifile).file);
         eval([structname '=tmp;']);
         try
-            if ifile==1
+            % if append==true we try to append to any existing file
                 if append
                     if exist(mergefile,'file')
                         save(mergefile,structname,'-append');
@@ -66,23 +71,30 @@ function [success mergefile] = merge_mat(guisdapdir,append,delfiles)
                         save(mergefile,structname);                    
                     end
                 else
-                    save(mergefile,structname);
+                    % if append==false, create a new file for each full hour
+                    if curhour==prevhour
+                        save(mergefile,structname,'-append');
+                    else
+                        save(mergefile,structname);
+                    end                        
                 end
-            else
-                save(mergefile,structname,'-append');
-            end
         catch
             success = 3;
             return
         end
-        try
-            if delfiles
-                delete(guisdapfiles(ifile).fname);
-            end
-        catch
-            success = 4;
-        end
+        prevhour = curhour;
         disp(guisdapfiles(ifile).file)
     end
+
+    if delfiles
+        for ifile=1:length(guisdapfiles)
+            try
+                delete(guisdapfiles(ifile).fname);
+            catch
+                success = 4;
+            end
+        end
+    end
+
 end
 
