@@ -69,7 +69,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
     global r_param r_error r_res r_status d_time path_GUP result_path v_Boltzmann v_amu p_XMITloc
 
     % merge outputs in one large file if true, set to false for the normal guisdap output files
-    merge_output_files = false;
+    merge_output_files = true;
 
     % flipchem model error standar deviation
     flipchem_modErr_std = .1;%.05;

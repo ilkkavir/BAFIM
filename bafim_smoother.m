@@ -39,6 +39,8 @@ function bafim_smoother( datadir )
         end
         nf = length(flist); 
         mergedfile = true;
+        % [path1,file1,ext1] = fileparts(datadir);
+        % datadir2 = fullfile(path1,[file1 '_smooth.mat'])
     end
 
 
@@ -158,6 +160,7 @@ function bafim_smoother( datadir )
             save(dfpath,'r_param','r_param_smooth','r_param_filter','r_error','r_error_smooth','r_error_filter','-append');
             fprintf("\r %s",dfpath)
         else
+
             dd.r_param = r_param;
             dd.r_param_smooth = r_param_smooth;
             dd.r_param_filter = r_param_filter;
@@ -169,6 +172,11 @@ function bafim_smoother( datadir )
             eval([structname '=dd;']);
 
             save(datadir,structname,'-append')
+            % if k==nf
+            %     save(datadir2,structname)
+            % else
+            %     save(datadir2,structname,'-append')
+            % end            
 
             fprintf("\r %08d",flist(k).file)
 

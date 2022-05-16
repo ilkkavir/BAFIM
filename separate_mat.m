@@ -31,8 +31,8 @@ function success = separate_mat(mergedfile,delfile)
     end
     
     % field names in the merged file
-    try 
-        fnames = fieldnames(matfile(mergedfile));
+    try
+        fnames = sort(fieldnames(matfile(mergedfile)));
     catch
         success = 1;
         return
@@ -44,7 +44,7 @@ function success = separate_mat(mergedfile,delfile)
             if fname(1:4)=='data'
                 % load contents of one separate mat file
                 try
-                    tmpdata = load(mergedfile,fname);
+                    tmpdata = getfield(load(mergedfile,fname),fname);
                 catch
                     success = 2;
                     return
