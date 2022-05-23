@@ -200,7 +200,22 @@ function bafim_smoother( datadir , mergedfile )
 
             structname = sprintf('data%08d',flist(k).file);
             eval([structname '=dd;']);
-            save(fullfile(datadir,flist(k).mergedfname),structname,'-append')
+            savesuccess = false;
+            itry = 0;
+            while ~savesuccess
+                savesuccess = true;
+                try
+                    save(fullfile(datadir,flist(k).mergedfname),structname,'-append')
+                catch
+                    savesuccess = false;
+                    itry = itry + 1;
+                    pause(5);
+                    if itry > 12
+                        error(['cannot write to file ' outfile])
+                    end
+                end
+            end
+            disp(itry)
 
             % dfpath = fullfile(datadir,flist(k).fname);
             % save(dfpath,'-struct','dd')
