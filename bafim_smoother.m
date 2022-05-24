@@ -1,4 +1,4 @@
-function bafim_smoother( datadir , mergedfile )
+function bafim_smoother( datadir , mergedfile , newoutfile)
 %
 % bafim_smoother( datadir )
 %
@@ -8,6 +8,8 @@ function bafim_smoother( datadir , mergedfile )
 % INPUT:
 %   datadir     a GUISDAP output directory with BAFIM fit results
 %   mergedfile  true if the input data merged guisdap output files, false for normal guisdap files
+%   newoutfile  true if the output should be written in a new merged file, false to append to the
+%               same file where the results were read from
 %
 % OUTPUT:
 %             none, the smoothed results are appended to the original output files
@@ -20,6 +22,10 @@ function bafim_smoother( datadir , mergedfile )
 
     persistent r_param_smooth_next r_error_smooth_next r_apriori_next r_apriorierror_next
 
+    if nargin < 3
+        newoutfile = false;
+    end
+    
     if nargin < 2
         mergedfile = false;
     end
@@ -47,7 +53,7 @@ function bafim_smoother( datadir , mergedfile )
     % end
 
     if mergedfile
-        % file nams of the merged files must start with "GUISDAP"
+        % file names of the merged files must start with "GUISDAP"
         df = dir(fullfile(datadir,'GUISDAP*.mat'));
         l = 1;
         flist = [];
@@ -205,10 +211,20 @@ function bafim_smoother( datadir , mergedfile )
             while ~savesuccess
                 savesuccess = true;
                 try
-                    save(fullfile(datadir,flist(k).mergedfname),structname,'-append')
+                    outfile = fullfile(datadir,flist(k).mergedfname);
+                    if newoutfile
+                        tmp = strsplit(outfile,'.mat');
+                        outfile = [char(tmp(1)) '_smoother.mat'];
+                    end
+                    disp(outfile)
+                    if exist(outfile,'file')
+                        save(outfile,structname,'-append')
+                    else
+                        save(outfile,structname)
+                    end
                 catch
                     savesuccess = false;
-                    itry = itry + 1;
+                    itry = itry + 1
                     pause(5);
                     if itry > 12
                         error(['cannot write to file ' outfile])
