@@ -54,20 +54,23 @@ function bafim_smoother( datadir , mergedfile , newoutfile)
 
     if mergedfile
         % file names of the merged files must start with "GUISDAP"
-        df = dir(fullfile(datadir,'GUISDAP*.mat'));
+        df = dir(fullfile(datadir,'GUISDAP*.mat'))
         l = 1;
         flist = [];
         for ifile=1:length(df)
-            % the file names should be properly ordered by dir
-            fnames = sort(fieldnames(matfile(fullfile(df(ifile).folder,df(ifile).name))));
-            for k=1:length(fnames)
-                fname = char(fnames(k));
-                if length(fname)==12
-                    if fname(1:4)=='data'
-                        flist(l).file = str2num(fname(5:12));
-                        flist(l).fname = fullfile(datadir,[fname(5:12) '.mat']);
-                        flist(l).mergedfname = df(ifile).name;
-                        l = l+1;
+            % do not use smoother output files
+            if isempty(strfind(df(ifile).name,'_smoother.mat'))
+                % the file names should be properly ordered by dir
+                fnames = sort(fieldnames(matfile(fullfile(df(ifile).folder,df(ifile).name))));
+                for k=1:length(fnames)
+                    fname = char(fnames(k));
+                    if length(fname)==12
+                        if fname(1:4)=='data'
+                            flist(l).file = str2num(fname(5:12));
+                            flist(l).fname = fullfile(datadir,[fname(5:12) '.mat']);
+                            flist(l).mergedfname = df(ifile).name;
+                            l = l+1;
+                        end
                     end
                 end
             end
@@ -115,7 +118,7 @@ function bafim_smoother( datadir , mergedfile , newoutfile)
             r_error_filter = dd.r_error;
         end
 
-        if k < nf
+        if k < nf & isfield(dd,'BAFIM_G')
 
             r_param_filter_s = real_to_scaled( r_param_filter );
             r_error_filter_s = real_to_scaled( r_error_filter);
@@ -145,7 +148,6 @@ function bafim_smoother( datadir , mergedfile , newoutfile)
 
                 P_k1_pred( ((0:4)*nhei+ihei) , ((0:4)*nhei+ihei) ) = diag(r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2);
             end
-
             m_k_smooth = m_k + dd.BAFIM_G * ( m_k1_smooth - m_k1_pred);
             P_k_smooth = P_k + dd.BAFIM_G * ( P_k1_smooth - P_k1_pred ) * dd.BAFIM_G';
 
@@ -159,6 +161,7 @@ function bafim_smoother( datadir , mergedfile , newoutfile)
             r_error_smooth_s = real_to_scaled(r_error);
             var_k_smooth = diag(P_k_smooth);
             r_error_smooth_s(:,1) = sqrt(var_k_smooth(1:nhei));
+
             r_error_smooth_s(:,2) = sqrt(var_k_smooth((nhei+1):(2*nhei)));
             r_error_smooth_s(:,3) = sqrt(var_k_smooth((2*nhei+1):(3*nhei)));
             r_error_smooth_s(:,5) = sqrt(var_k_smooth((3*nhei+1):(4*nhei)));
@@ -208,6 +211,7 @@ function bafim_smoother( datadir , mergedfile , newoutfile)
             eval([structname '=dd;']);
             savesuccess = false;
             itry = 0;
+            disp('...')
             while ~savesuccess
                 savesuccess = true;
                 try
@@ -247,8 +251,19 @@ function bafim_smoother( datadir , mergedfile , newoutfile)
     end
 
 
-    % if mergedfile
-    %     merge_mat(datadir,false,true)
-    % end
+    % delete the original output files and rename the smoother outputs
+    if mergedfile
+        if newoutfile
+            for ifile=1:length(df)
+                delete(fullfile(df(ifile).folder,df(ifile).name))
+                outfile = fullfile(datadir,df(ifile).name)
+                tmp = strsplit(outfile,'.mat');
+                outfile_smoother = [char(tmp(1)) '_smoother.mat'];
+                if exist(outfile_smoother,'file')
+                    movefile(outfile_smoother,outfile);
+                end
+            end
+        end
+    end
 
 end
