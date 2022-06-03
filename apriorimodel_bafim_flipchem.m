@@ -283,6 +283,8 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
             % correct only if we fit composition in this gate
             if heights(hind)>hlimOp(1) & heights(hind)<hlimOp(2)
 
+                r_error_s_copy = r_error_s(hind,:);
+                r_error_copy = r_error(hind,:);
                 % skip the composition update if something fails
                 try
                     
@@ -403,10 +405,10 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                     % end
 
                     % final check that everything is ok after the flipchem fit
-                    if any(any(isnan(covmat)))
+                    if any(any(isnan(covmat2)))
                         error('NaN in covariance matrix, skipping the flipchem fit.');
                     end
-                    if any(any(diag(covmat)<0))
+                    if any(any(diag(covmat2)<0))
                         error('Negative variance, skipping the flipchem fit.');
                     end
                     if any(isnan(r_error(hind,:)))
@@ -418,7 +420,8 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
 
                     % if the flipchem fit fails we continue with the guisdap fit results
                 catch
-                    ;
+                    r_error_s(hind,:) = r_error_s_copy;
+                    r_error(hind,:) = r_error_copy;
                 end
 
             end
