@@ -176,10 +176,13 @@ function bafim_smoother( datadir , mergedfile , newoutfile)
         end
 
         % replace NaN's with the filter values
-        indnan = isnan(r_param_smooth) | isnan(r_error_smooth)
-        r_param_smooth(indnan) = r_param_filter(indnan);
-        r_error_smooth(indnan) = r_error_filter(indnan);
-        warning('NaN value in smoother output, replacing with the filter output.')
+        indnan_par = isnan(r_param_smooth);
+        indnan_err = isnan(r_error_smooth);
+        if any(any(indnan_par)) | any(any(indnan_err))
+            r_param_smooth = r_param_filter;
+            r_error_smooth = r_error_filter;            
+            warning('NaN value in smoother output, replacing with the filter output.')
+        end
 
         % make sure that the smoothed values are within paramlims, this should rarely have any effect
         for ihei=1:nhei

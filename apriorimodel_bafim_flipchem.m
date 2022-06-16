@@ -67,6 +67,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
 % d_time    timestap from the raw data
     
     global r_param r_error r_res r_status d_time path_GUP result_path v_Boltzmann v_amu p_XMITloc
+    global v_lightspeed v_Boltzmann v_epsilon0 v_elemcharge sc_angle k_radar
 
     % merge outputs in one large file if true, set to false for the normal guisdap output files
     merge_output_files = true;
@@ -205,38 +206,53 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
             end
         end
 
-        % % exclude weak echoes on the top side
-        % if nhei > 5
-        %     iweak = nhei+1
-        %     while any(r_param((iweak-5):(iweak-1),1)<5e10)
-        %         iweak = iweak - 1;
-        %         if iweak == 6
-        %             break
-        %         end
-        %     end
-        %     if iweak <= nhei
-        %         for hind = iweak:nhei
-        %             if heights(hind)>hlimNe(1) & heights(hind)<hlimNe(2)
-        %                 r_error(hind,1) = 1e12;
-        %             end
-        %             if heights(hind)>hlimTi(1) & heights(hind)<hlimTi(2)
-        %                 r_error(hind,2) = 5000;
-        %             end
-        %             if heights(hind)>hlimTr(1) & heights(hind)<hlimTr(2)
-        %                 r_error(hind,3) = 5;
-        %             end
-        %             if heights(hind)>hlimVi(1) & heights(hind)<hlimVi(2)
-        %                 r_error(hind,5) = 1e3;
-        %             end
-        %             if heights(hind)>hlimOp(1) & heights(hind)<hlimOp(2)
-        %                 r_error(hind,6) = .1;
-        %             end
-        %             r_error(hind,7:end) = 0;
-        %             r_status(hind) = 6;
-        %         end
-        %     end
-        %     disp(iweak)
-        % end
+        % exclude weak echoes on the top side
+        if nhei > 5
+            iweak = nhei+1
+            %    global v_lightspeed v_Boltzmann v_epsilon0 v_elemcharge sc_angle k_fradar
+            tetmp = max(r_param(:,2).*r_param(:,3),apriori(:,2).*apriori(:,3));
+            titmp = max(r_param(:,2),apriori(:,2));
+            debye = sqrt((v_epsilon0*v_Boltzmann/v_elemcharge^2)./(r_param(:,1).*(1./tetmp + 1./titmp)));
+            % should replace the Ne limit with Debye length. We start to have problems when the Debye length / radar wave length > .05 (debye length * wave number > 0.3) ... done
+            %while any(r_param((iweak-5):(iweak-1),1)<2e10)
+            kdeb = debye .* k_radar(1);
+            while any( kdeb((iweak-5):(iweak-1)) > .4)
+                iweak = iweak - 1;
+                if iweak == 6
+                    break
+                end
+            end
+            if iweak <= nhei
+                for hind = iweak:nhei
+                    %             if heights(hind)>hlimNe(1) & heights(hind)<hlimNe(2)
+                    %                 r_error(hind,1) = 1e12;
+                    %             end
+                    %             if heights(hind)>hlimTi(1) & heights(hind)<hlimTi(2)
+                    %                 r_error(hind,2) = 5000;
+                    %             end
+                    %             if heights(hind)>hlimTr(1) & heights(hind)<hlimTr(2)
+                    %                 r_error(hind,3) = 5;
+                    %             end
+                    %             if heights(hind)>hlimVi(1) & heights(hind)<hlimVi(2)
+                    %                 r_error(hind,5) = 1e3;
+                    %             end
+                    %             if heights(hind)>hlimOp(1) & heights(hind)<hlimOp(2)
+                    %                 r_error(hind,6) = .1;
+                    %             end
+                    %             r_error(hind,7:end) = 0;
+                    %             r_status(hind) = 6;
+
+                    % reject the point if Te/Ti fit was attempeted
+                    if heights(hind)>hlimTr(1) & heights(hind)<hlimTr(2)
+                        r_param(hind,1:6) = aprioriprev(hind,1:6);
+                        r_error(hind,1:6) = apriorierrorprev(hind,1:6);
+                        r_error(hind,7:end) = 0;
+                        r_status(hind) = 6;
+                    end
+                end
+            end
+            disp([iweak heights(iweak-1)])
+        end
 
         r_param_orig_cleaned = r_param;
         r_error_orig_cleaned = r_error;
@@ -584,7 +600,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
             apriori2(:,6) = partmp(:,6);
             
             % The final prior variances
-            apriorierror2(:,1) = errtmp(:,1) + tsNe*sqrt(tstep);
+            apriorierror2(:,1) = errtmp(:,1) + tsNe*sqrt(tstep)./hsAlt; % smaller process noise on the smooth and low Ne topside
             apriorierror2(:,2) = errtmp(:,2) + tsTi*sqrt(tstep);
             apriorierror2(:,3) = errtmp(:,3) + tsTr*sqrt(tstep);
             apriorierror2(:,4) = 0;
@@ -673,7 +689,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         % Prior for the very first time step or after a long data gap from the IRI model. apriori2 already contains the IRI parameters, just form the error array here. 
         
         % Ne
-        apriorierror2(:,1) = tsNe*sqrt(tstep);
+        apriorierror2(:,1) = tsNe*sqrt(tstep)./hsAlt; % smaller process noise on the smooth and low Ne topside
         apriorierror2(heights<hlimNe(1),2) = 1e-3;
         apriorierror2(heights>hlimNe(2),2) = 1e-3;
         % Ti
