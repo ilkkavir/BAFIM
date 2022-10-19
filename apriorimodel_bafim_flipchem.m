@@ -121,12 +121,6 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
     % limits for plasma parameters, these are more strict than those in fit_altitude(:,7:8)
     paramlims = [1e9 50 .1 1 -1e4 0 ; 1e13 1e4 10 1e9 1e4 1];
     
-    % The final correlation lengths are products hsXX*H, where H is the plasma scale height as calculated from IRI parameters.
-    H = v_Boltzmann .* apriori(:,2).*(1+apriori(:,3))./2 ... 
-        ./ ( v_amu .* ( apriori(:,6)*16 + 30.5*(1-apriori(:,6)) ) .* 9.82.*(6372./(6372+heights)).^2 );
-
-    hsAlt = H/1000;
-    
     % r_param is empty on the first iteration. Initialize d_time_prev, add the guisdap init directory to the path, and copy this file to the result directory.
     if size(r_param,1)==0
         d_time_prev = d_time(1,:);
@@ -144,6 +138,15 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
     tstep = seconds(datetime(d_time(2,:))-datetime(d_time_prev));
     d_time_prev = d_time(2,:);
     
+    % The final correlation lengths are products hsXX*H, where H is the plasma scale height as calculated from IRI parameters.
+    H = v_Boltzmann .* apriori(:,2).*(1+apriori(:,3))./2 ... 
+        ./ ( v_amu .* ( apriori(:,6)*16 + 30.5*(1-apriori(:,6)) ) .* 9.82.*(6372./(6372+heights)).^2 );
+
+    hsAlt = H/1000;
+
+    % The correlation lengths must scale with time step duration to make the system (somewhat) independent of the step length
+    hsAlt = hsAlt * sqrt(tstep);
+    
     if nhei > 1
         % Approximate widths of the height gates
         dheights = diff(heights);
@@ -153,6 +156,8 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
     % Copy the default prior model
     apriori2 = apriori;
     apriorierror2 = apriorierror;
+
+    kdeb = [];
 
     % if this is not the first time step (either from experiment startup of after a long data gap)
     if istep>1 & tstep < 600
@@ -216,7 +221,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
             % should replace the Ne limit with Debye length. We start to have problems when the Debye length / radar wave length > .05 (debye length * wave number > 0.3) ... done
             %while any(r_param((iweak-5):(iweak-1),1)<2e10)
             kdeb = debye .* k_radar(1);
-            while any( kdeb((iweak-5):(iweak-1)) > .4)
+            while any( kdeb((iweak-5):(iweak-1)) > .6)
                 iweak = iweak - 1;
                 if iweak == 6
                     break
@@ -667,7 +672,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         while ~savesuccess
             savesuccess = true;
             try
-                save(outfile,'BAFIM_G','r_param','r_error','r_status','r_param_filter','r_error_filter','r_param_rcorr','r_error_rcorr','O2p','NOp','-append');
+                save(outfile,'BAFIM_G','r_param','r_error','r_status','r_param_filter','r_error_filter','r_param_rcorr','r_error_rcorr','O2p','NOp','kdeb','-append');
             catch
                 savesuccess = false;
                 itry = itry + 1;
