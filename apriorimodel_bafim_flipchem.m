@@ -70,7 +70,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
     global v_lightspeed v_Boltzmann v_epsilon0 v_elemcharge sc_angle k_radar
 
     % merge outputs in one large file if true, set to false for the normal guisdap output files
-    merge_output_files = true;
+    merge_output_files = false;
 
     % flipchem model error standar deviation
     flipchem_modErr_std = .1;%.05;
@@ -79,7 +79,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
     dx = .001;
     
     % We need to pass some variables from one timestep to another
-    persistent d_time_prev aprioriprev apriorierrorprev filename istep
+    persistent d_time_prev aprioriprev apriorierrorprev filename istep tfromstart
 
 
     r_param_orig = r_param;
@@ -126,6 +126,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         d_time_prev = d_time(1,:);
         addpath([path_GUP 'init']);
         istep = 1;
+        tfromstart = 0;
     end
     if istep==2
         % copy the prior model in the output directory to help in development work
@@ -159,8 +160,20 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
 
     kdeb = [];
 
+    if tstep > 600
+        tfromstart = 0;
+    else
+        tfromstart = tfromstart + tstep;
+    end
+
+    % take prior from IRI if exp start was less than 2 minutes ago to avoid problems with radar system instabilities
+    if tfromstart > 120
+
+    
+    % take prior from IRI on two first time steps and on two steps after a data gap
+    %    if istep>2 & tstep < 600 & tstepprev < 600
     % if this is not the first time step (either from experiment startup of after a long data gap)
-    if istep>1 & tstep < 600
+        %    if istep>1 & tstep < 600
         
         % Replace unreasonable values with the previous predictions. 
         for hind = 1:nhei
@@ -691,14 +704,15 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         end
         
     else
-        % Prior for the very first time step or after a long data gap from the IRI model. apriori2 already contains the IRI parameters, just form the error array here. 
-        
+        % Prior for the very first time step or after a long data gap from the IRI model. apriori2 already contains the IRI parameters, except for Ne which might be from power profiles, just form the error array here.
+
+
         % Ne
         apriorierror2(:,1) = tsNe*sqrt(tstep)./hsAlt; % smaller process noise on the smooth and low Ne topside
         apriorierror2(heights<hlimNe(1),2) = 1e-3;
         apriorierror2(heights>hlimNe(2),2) = 1e-3;
         % Ti
-        apriorierror2(:,2) = tsTi*sqrt(tstep);
+        Apriorierror2(:,2) = tsTi*sqrt(tstep);
         apriorierror2(heights<hlimTi(1),2) = 1e-3;
         apriorierror2(heights>hlimTi(2),2) = 1e-3;
         % Tr
@@ -716,6 +730,17 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         apriorierror2(heights<hlimOp(1),6) = 1e-3;
         apriorierror2(heights>hlimOp(2),6) = 1e-3;
 
+        % if istep > 1 the previous output file should be deleted, because we want to completely skip that time step
+        if istep > 1
+            outfile = fullfile(result_path,filename);
+            try
+                disp(['Deleting' outfile])
+                delete(outfile);
+            catch
+                disp('delete failed');
+            end
+        end
+        
     end
     
     % make sure that the prior values are within our limits, this should rarely have any effect

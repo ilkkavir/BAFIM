@@ -64,7 +64,7 @@ function success = separate_mat(mergedfile,delfile)
                     success = 2;
                     return
                 end
-                outfile = [fname(5:12) '.mat'];
+                outfile = fullfile(fileparts(mergedfile),[fname(5:12) '.mat']);
                 try
                     save(outfile,'-struct','tmpdata');
                 catch
