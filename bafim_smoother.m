@@ -261,8 +261,10 @@ function bafim_smoother( datadir , mergedfile , newoutfile)
         r_param = r_param_smooth;
         r_error = r_error_smooth;
 
+        r_dp = r_param(:,6);
+
         if ~mergedfile
-            save(dfpath,'r_param','r_param_smooth','r_param_filter','r_error','r_error_smooth','r_error_filter','r_param_rcorr_smooth','r_error_rcorr_smooth','-append');
+            save(dfpath,'r_param','r_param_smooth','r_param_filter','r_error','r_error_smooth','r_error_filter','r_param_rcorr_smooth','r_error_rcorr_smooth','r_dp','-append');
             fprintf("\r %s",dfpath)
         else
 
@@ -274,6 +276,8 @@ function bafim_smoother( datadir , mergedfile , newoutfile)
             dd.r_error = r_error;
             dd.r_error_smooth = r_error_smooth;
             dd.r_error_filter = r_error_filter;
+
+            dd.r_dp = r_dp;
 
             %
             dd.r_param_rcorr_smooth = r_param_rcorr_smooth;

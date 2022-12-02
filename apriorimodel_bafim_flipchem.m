@@ -226,7 +226,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
 
         % exclude weak echoes on the top side
         if nhei > 5
-            iweak = nhei+1
+            iweak = nhei+1;
             %    global v_lightspeed v_Boltzmann v_epsilon0 v_elemcharge sc_angle k_fradar
             tetmp = max(r_param(:,2).*r_param(:,3),apriori(:,2).*apriori(:,3));
             titmp = max(r_param(:,2),apriori(:,2));
@@ -269,7 +269,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                     end
                 end
             end
-            disp([iweak heights(iweak-1)])
+            %            disp([iweak heights(iweak-1)])
         end
 
         r_param_orig_cleaned = r_param;
@@ -317,6 +317,8 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
             % correct only if we fit composition in this gate
             if heights(hind)>hlimOp(1) & heights(hind)<hlimOp(2)
 
+                r_param_s_copy = r_param_s(hind,:);
+                r_param_copy = r_param(hind,:);
                 r_error_s_copy = r_error_s(hind,:);
                 r_error_copy = r_error(hind,:);
                 % skip the composition update if something fails
@@ -328,7 +330,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                     % the parameters that were actually fitted
                     fitpar = diag(covmat) ~= 0;
                     ifitpar = find(fitpar);
-                    
+
                     % a new fit with penalty from deviation from flipchem
                     [x,fval,exitflag,output] = fminsearch( @(p) SS_flipchem( p , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc ) , r_param_orig_cleaned_s(hind,fitpar) , fms_opts);
                     
@@ -433,6 +435,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                     r_error_old = r_error; % copy of the old error vector for the disp below...
                                            % the vector format in real units
                     r_error(hind,:) = scaled_to_real(r_error_s(hind,:));
+
                     % if disperrs
                     %                disp(r_error_old(hind,1:6))
                     %                disp(r_error(hind,1:6))
@@ -448,12 +451,15 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                     if any(isnan(r_error(hind,:)))
                         error('NaN standard deviation, skipping the flipchem fit.');
                     end
-                    if any(r_error(hind,:)<0)
+                    if any(r_error(hind,1:6)<0)
                         error('Negative standard deviation, skipping the flipchem fit.');
                     end
 
                     % if the flipchem fit fails we continue with the guisdap fit results
-                catch
+                catch me
+                    disp(me.message);
+                    r_param_s(hind,:) = r_param_s_copy;
+                    r_param(hind,:) = r_param_copy;
                     r_error_s(hind,:) = r_error_s_copy;
                     r_error(hind,:) = r_error_copy;
                 end
@@ -468,8 +474,8 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                 if isnan(O2p(hind)) | isnan(NOp(hind))
                     error('NaN compositio, skipping the flipchem fit.');
                 end
-            catch
-                ;
+            catch me
+                disp(me.message);
             end
             
         end
@@ -674,6 +680,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         r_param_filter = r_param;
         r_error_filter = r_error;
 
+        r_dp = r_param(:,6);
 
         % write the matrix G and the smoothed parameters in the GUISDAP output file.
         % Write also r_param and r_error, since they have changed in the flipchem fit.
@@ -685,7 +692,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         while ~savesuccess
             savesuccess = true;
             try
-                save(outfile,'BAFIM_G','r_param','r_error','r_status','r_param_filter','r_error_filter','r_param_rcorr','r_error_rcorr','O2p','NOp','kdeb','-append');
+                save(outfile,'BAFIM_G','r_param','r_error','r_status','r_param_filter','r_error_filter','r_param_rcorr','r_error_rcorr','r_dp','O2p','NOp','kdeb','-append');
             catch
                 savesuccess = false;
                 itry = itry + 1;
@@ -695,7 +702,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                 end
             end
         end
-        disp(itry)
+        %        disp(itry)
 
 
         % merge the guisdap output files into one large file to avoid too many files...

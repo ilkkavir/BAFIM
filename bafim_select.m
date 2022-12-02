@@ -29,20 +29,24 @@ function bafim_select( datadir , restype )
           case 'filte'
             r_param = dd.r_param_filter;
             r_error = dd.r_error_filter;
+            r_dp = dd.r_param_filter(:,6);
           case 'smoot'
             r_param = dd.r_param_smooth;
             r_error = dd.r_error_smooth;
+            r_dp  =dd.r_param_smooth(:,6);
           case 'rcorr'
             r_param = dd.r_param_rcorr;
             r_error = dd.r_error_rcorr;
+            r_dp = dd.r_param_rcorr(:,6);
           case 'rcors'
             r_param = dd.r_param_rcorr_smooth;
             r_error = dd.r_error_rcorr_smooth;
+            r_dp = dd.r_param_rcorr_smooth(:,6);
         otherwise
             error("unknown restype, must be either 'filter' or 'smooth'")
         end
 
-        save(dfpath,'r_param','r_error','-append');
+        save(dfpath,'r_param','r_error','r_dp','-append');
 
         fprintf("\r %s",dfpath)
         
