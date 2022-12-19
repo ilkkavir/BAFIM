@@ -1,6 +1,6 @@
 function bafim_smoother( datadir , mergedfile , newoutfile)
 %
-% bafim_smoother( datadir )
+% bafim_smoother( datadir , mergedfile , newoutfile)
 %
 % An RTS-smoother for GUISDAP BAFIM output.
 %

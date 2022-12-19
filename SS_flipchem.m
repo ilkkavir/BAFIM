@@ -29,6 +29,7 @@ function SS = SS_flipchem(param,parinds,param_fit,covar,stdModErr,glat,glon,alt,
     outputs = fc.get_point(glat,glon,alt,ne,te,ti);
     
     fc_comp = outputs{4}/ne;
+    %    fc_comp = 1 - (outputs{5} + outputs{6})/ne;
     % % take the scaled parameter vector, we will change only the composition
     % param2 = param_new;
     % param2(6) = outputsm{4}/param_r(1);

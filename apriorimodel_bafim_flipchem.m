@@ -70,10 +70,10 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
     global v_lightspeed v_Boltzmann v_epsilon0 v_elemcharge sc_angle k_radar
 
     % merge outputs in one large file if true, set to false for the normal guisdap output files
-    merge_output_files = false;
+    merge_output_files = true;
 
     % flipchem model error standar deviation
-    flipchem_modErr_std = .1;%.05;
+    flipchem_modErr_std = .1;
 
     % step length in finite difference gradient calculations
     dx = .001;
@@ -227,12 +227,15 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         % exclude weak echoes on the top side
         if nhei > 5
             iweak = nhei+1;
-            %    global v_lightspeed v_Boltzmann v_epsilon0 v_elemcharge sc_angle k_fradar
+
+            % Te and Ti, take max of model and fit
             tetmp = max(r_param(:,2).*r_param(:,3),apriori(:,2).*apriori(:,3));
             titmp = max(r_param(:,2),apriori(:,2));
+
+            % Debye length
             debye = sqrt((v_epsilon0*v_Boltzmann/v_elemcharge^2)./(r_param(:,1).*(1./tetmp + 1./titmp)));
-            % should replace the Ne limit with Debye length. We start to have problems when the Debye length / radar wave length > .05 (debye length * wave number > 0.3) ... done
-            %while any(r_param((iweak-5):(iweak-1),1)<2e10)
+
+            % remove points where the debye length is a signficant fraction of the radar wavelength
             kdeb = debye .* k_radar(1);
             while any( kdeb((iweak-5):(iweak-1)) > .6)
                 iweak = iweak - 1;
@@ -242,25 +245,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
             end
             if iweak <= nhei
                 for hind = iweak:nhei
-                    %             if heights(hind)>hlimNe(1) & heights(hind)<hlimNe(2)
-                    %                 r_error(hind,1) = 1e12;
-                    %             end
-                    %             if heights(hind)>hlimTi(1) & heights(hind)<hlimTi(2)
-                    %                 r_error(hind,2) = 5000;
-                    %             end
-                    %             if heights(hind)>hlimTr(1) & heights(hind)<hlimTr(2)
-                    %                 r_error(hind,3) = 5;
-                    %             end
-                    %             if heights(hind)>hlimVi(1) & heights(hind)<hlimVi(2)
-                    %                 r_error(hind,5) = 1e3;
-                    %             end
-                    %             if heights(hind)>hlimOp(1) & heights(hind)<hlimOp(2)
-                    %                 r_error(hind,6) = .1;
-                    %             end
-                    %             r_error(hind,7:end) = 0;
-                    %             r_status(hind) = 6;
-
-                    % reject the point if Te/Ti fit was attempeted
+                    % reject the point if Te/Ti fit was attempted, but keep in the bottom part
                     if heights(hind)>hlimTr(1) & heights(hind)<hlimTr(2)
                         r_param(hind,1:6) = aprioriprev(hind,1:6);
                         r_error(hind,1:6) = apriorierrorprev(hind,1:6);
@@ -331,8 +316,12 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                     fitpar = diag(covmat) ~= 0;
                     ifitpar = find(fitpar);
 
+                    % the model error with additional scaling by height above 150 km
+                    fcStd = max(1,exp((heights(hind)-150)/(350/log(2)))) * flipchem_modErr_std;
+
                     % a new fit with penalty from deviation from flipchem
-                    [x,fval,exitflag,output] = fminsearch( @(p) SS_flipchem( p , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc ) , r_param_orig_cleaned_s(hind,fitpar) , fms_opts);
+                    %                    [x,fval,exitflag,output] = fminsearch( @(p) SS_flipchem( p , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc ) , r_param_orig_cleaned_s(hind,fitpar) , fms_opts);
+                    [x,fval,exitflag,output] = fminsearch( @(p) SS_flipchem( p , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, fcStd , glat , glon , galt , fc ) , r_param_orig_cleaned_s(hind,fitpar) , fms_opts);
                     
                     % update the parameter vector
                     r_param_s(hind,fitpar) = x;
@@ -350,7 +339,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                     Hess = zeros(nparam,nparam);
                     
                     % sum of squares at the iteration convergence point
-                    SS0 = SS_flipchem( r_param_s(hind,fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc);
+                    SS0 = SS_flipchem( r_param_s(hind,fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, fcStd , glat , glon , galt , fc);
                     
                     % Diagonal of the hessian
                     for k=1:nparam
@@ -358,12 +347,12 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                         % +dx
                         r_param_tmp = r_param_s(hind,:);
                         r_param_tmp(ifitpar(k)) = r_param_tmp(ifitpar(k)) + dx;
-                        Hess(k,k) = Hess(k,k) + SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc); 
+                        Hess(k,k) = Hess(k,k) + SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, fcStd , glat , glon , galt , fc); 
                         
                         % -dx
                         r_param_tmp = r_param_s(hind,:);
                         r_param_tmp(ifitpar(k)) = r_param_tmp(ifitpar(k)) - dx;
-                        Hess(k,k) = Hess(k,k) + SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc);
+                        Hess(k,k) = Hess(k,k) + SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, fcStd , glat , glon , galt , fc);
                         
                         % the centre and scaling
                         Hess(k,k) = (Hess(k,k) - 2*SS0) / dx^2;
@@ -379,25 +368,25 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                             r_param_tmp = r_param_s(hind,:);
                             r_param_tmp(ifitpar(k)) = r_param_tmp(ifitpar(k)) + dx;
                             r_param_tmp(ifitpar(l)) = r_param_tmp(ifitpar(l)) + dx;
-                            Hess(k,l) = Hess(k,l) + SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc); 
+                            Hess(k,l) = Hess(k,l) + SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, fcStd , glat , glon , galt , fc); 
                             
                             % +dx-dx
                             r_param_tmp = r_param_s(hind,:);
                             r_param_tmp(ifitpar(k)) = r_param_tmp(ifitpar(k)) + dx;
                             r_param_tmp(ifitpar(l)) = r_param_tmp(ifitpar(l)) - dx;
-                            Hess(k,l) = Hess(k,l) - SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc); 
+                            Hess(k,l) = Hess(k,l) - SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, fcStd , glat , glon , galt , fc); 
                             
                             % -dx+dx
                             r_param_tmp = r_param_s(hind,:);
                             r_param_tmp(ifitpar(k)) = r_param_tmp(ifitpar(k)) - dx;
                             r_param_tmp(ifitpar(l)) = r_param_tmp(ifitpar(l)) + dx;
-                            Hess(k,l) = Hess(k,l) - SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc); 
+                            Hess(k,l) = Hess(k,l) - SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, fcStd , glat , glon , galt , fc); 
                             
                             % -dx-dx
                             r_param_tmp = r_param_s(hind,:);
                             r_param_tmp(ifitpar(k)) = r_param_tmp(ifitpar(k)) - dx;
                             r_param_tmp(ifitpar(l)) = r_param_tmp(ifitpar(l)) - dx;
-                            Hess(k,l) = Hess(k,l) + SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc); 
+                            Hess(k,l) = Hess(k,l) + SS_flipchem( r_param_tmp(fitpar) , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, fcStd , glat , glon , galt , fc); 
                             
                             Hess(k,l) = Hess(k,l)/(4*dx^2);
                             Hess(l,k) = Hess(k,l);
@@ -410,7 +399,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                     while any(diag(Hess)<=0)
                         %                    disp('negative in Hess matrix diagonal')
                         Hess = Hess + eye(nparam);
-                        disperrs = true;
+                        %disperrs = true;
                     end
                     
                     % inverse of the Hessian matrix
@@ -421,7 +410,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                         %                    disp('negative in covariance matrix diagonal')
                         Hess = Hess + eye(nparam);
                         invhess = inv(Hess);
-                        disperrs = true;
+                        %disperrs = true;
                     end
                     
                     % covariance matrix of all parameters
@@ -432,7 +421,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                     
                     % convert the covariance matrix into the vector format used in guisdap
                     r_error_s(hind,:) = covm2vec(covmat2);
-                    r_error_old = r_error; % copy of the old error vector for the disp below...
+                    %r_error_old = r_error; % copy of the old error vector for the disp below...
                                            % the vector format in real units
                     r_error(hind,:) = scaled_to_real(r_error_s(hind,:));
 
