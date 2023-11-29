@@ -28,11 +28,11 @@ USAGE:
 
 The scaling factors etc. mentioned below are explained in the reference paper. 
 
-To use BAFIM in GUISDAP fits:
+To use BAFIM and Flipchem in GUISDAP fits:
 
-1. Select 'bafim' as the ionospheric model in GUISDAP, i.e. write the following in the 'Special' box of the 'GUISDAP for dummies' window:
+1. Select 'bafim_flipchem' as the ionospheric model in GUISDAP, i.e. write the following in the 'Special' box of the 'GUISDAP for dummies' window:
 
-iono_model='bafim'
+iono_model='bafim_flipchem'
 
 2. Set the lowest (hmin) and highest (hmax) altitude where each parameter is fitted, and scaling factors for process noise (st) and correlation length (sh) using the first four colums and six rows of the 'fit_altitude' array:
 
@@ -45,17 +45,17 @@ fit_altitude(1:6,1:4) = [ hmin_Ne , hmax_Ne , sh_Ne , st_Ne;
 
 For example:
 
-fit_altitude(1:6,1:4) = [   0 , Inf , 0.1 ,  2e11 ;
-		      	   80 , Inf , 0.3 ,    10 ;
-			  103 , Inf , 0.3 ,  0.05 ;
-			    0 ,   0 ,   0 ,     0 ;
-			   80 , Inf , 0.2 ,   2.5 ;
-			  130 , 350 , 0.2 , 0.003 ]
+fit_altitude(1:6,1:4) = [   0 , Inf ,  0.05 , 2.5e11 ;
+		      	   80 , Inf ,  0.1  ,     30 ;
+			   97 , Inf ,  0.1  ,   0.03 ;
+			    0 ,   0 ,    0  ,      0 ;
+			   80 , Inf , 0.05  ,    2.5 ;
+			  150 , 500 , 0.05  ,   0.01 ]
 
-3. Disable the GUISDAP satellite check routine and set transmitter phase pushing to zero:
+3. Tell the GUISDAP satellite check routine not to cut the profiles and set transmitter phase pushing to zero:
 
+a_satch.cut=0
 a_phasepush=0
-a_satch.do=0
 
 3. Start GUISDAP analysis as usual (hit 'GO')
 
