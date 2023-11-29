@@ -70,7 +70,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
     global v_lightspeed v_Boltzmann v_epsilon0 v_elemcharge sc_angle k_radar
 
     % merge outputs in one large file if true, set to false for the normal guisdap output files
-    merge_output_files = true;
+    merge_output_files = false;
 
     % flipchem model error standar deviation
     flipchem_modErr_std = .1;
@@ -84,7 +84,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
 
     r_param_orig = r_param;
     r_error_orig = r_error;
-    
+
     % Lowest & highest altitudes for fits from the input array
     hlimNe = fit_altitude(1,1:2);
     hlimTi = fit_altitude(2,1:2);
@@ -501,7 +501,6 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
             corrP(:,5) = corrP(:,5).*dheights./(hsVi*hsAlt);
             corrP(:,6) = corrP(:,6).*dheights./(hsOp*hsAlt);
             
-            
             % The first order terms.
             % M is always zero for the first and higher order terms
             % The zeroth-order terms are added later
@@ -525,6 +524,8 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
             end
             
             % The second order terms
+            % NOTE: This is approximately OK also when the altitude resolution changes, because we assume that
+            % the parameters are constant within a gate...
             for hind = 2:(nhei-1)
                 
                 A(Aind,hind-1) = 1;
@@ -613,12 +614,24 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
             apriori2(:,6) = partmp(:,6);
             
             % The final prior variances
-            apriorierror2(:,1) = errtmp(:,1) + tsNe*sqrt(tstep)./hsAlt; % smaller process noise on the smooth and low Ne topside
-            apriorierror2(:,2) = errtmp(:,2) + tsTi*sqrt(tstep);
-            apriorierror2(:,3) = errtmp(:,3) + tsTr*sqrt(tstep);
+            %
+            % THIS IS WRONG, ONE SHOULD CALCULATE SQRT(ERRTEMP^2 + tstep*TsXX^2)
+            %
+            %
+            %
+            % apriorierror2(:,1) = errtmp(:,1) + tsNe*sqrt(tstep)./hsAlt; % smaller process noise on the smooth and low Ne topside
+            % apriorierror2(:,2) = errtmp(:,2) + tsTi*sqrt(tstep);
+            % apriorierror2(:,3) = errtmp(:,3) + tsTr*sqrt(tstep);
+            % apriorierror2(:,4) = 0;
+            % apriorierror2(:,5) = errtmp(:,5) + tsVi*sqrt(tstep);
+            % apriorierror2(:,6) = errtmp(:,6) + tsOp*sqrt(tstep);
+
+            apriorierror2(:,1) = sqrt( errtmp(:,1).^2 + tsNe^2*tstep);
+            apriorierror2(:,2) = sqrt( errtmp(:,2).^2 + tsTi^2*tstep);
+            apriorierror2(:,3) = sqrt( errtmp(:,3).^2 + tsTr^2*tstep);
             apriorierror2(:,4) = 0;
-            apriorierror2(:,5) = errtmp(:,5) + tsVi*sqrt(tstep);
-            apriorierror2(:,6) = errtmp(:,6) + tsOp*sqrt(tstep);
+            apriorierror2(:,5) = sqrt( errtmp(:,5).^2 + tsVi^2*tstep);
+            apriorierror2(:,6) = sqrt( errtmp(:,6).^2 + tsOp^2*tstep);
 
         else
             % if something failed and the smoothed profiles were not copied, we need to use covariance matrices of the unsmoothed data
@@ -698,6 +711,63 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         if merge_output_files
             merge_mat(result_path,true,true);
         end
+
+
+
+        % figure(10)
+
+        % subplot(2,2,1)
+        % plot(r_param_orig(:,1),heights,'ko')
+        % hold on
+        % plot(r_param_orig(:,1)+r_error_orig(:,1),heights,'b-')
+        % plot(r_param_rcorr(:,1),heights,'r-')
+        % plot(apriori2(:,1)+apriorierror2(:,1),heights,'g-')
+        % xlim([0 1e12])
+        % hold off
+        
+        % subplot(2,2,2)
+        % plot(r_param_orig(:,2),heights,'ko')
+        % hold on
+        % plot(r_param_orig(:,2)+r_error_orig(:,2),heights,'b-')
+        % plot(r_param_rcorr(:,2),heights,'r-')
+        % plot(apriori2(:,2)+apriorierror2(:,2),heights,'g-')
+        % xlim([0 2000])
+        % hold off
+        
+        % % subplot(2,2,3)
+        % % plot(r_param_orig(:,3),heights,'ko')
+        % % hold on
+        % % plot(r_param_orig(:,3)+r_error_orig(:,3),heights,'b-')
+        % % plot(r_param_rcorr(:,3),heights,'r-')
+        % % plot(apriori2(:,3)+apriorierror2(:,3),heights,'g-')
+        % % xlim([0 3])
+        % % hold off
+        % subplot(2,2,3)
+        % plot(r_param_orig(:,3).*r_param_orig(:,2),heights,'ko')
+        % hold on
+        % plot(r_param_orig(:,3).*r_param_orig(:,2)+r_error_orig(:,3).*r_param_orig(:,2) + r_error_orig(:,2).*r_param_orig(:,3),heights,'b-')
+        % plot(r_param_rcorr(:,3).*r_param_rcorr(:,2) + r_param_rcorr(:,2).*r_error_rcorr(:,3) + r_param_rcorr(:,3).*r_error_rcorr(:,2),heights,'r-')
+        % plot(apriori2(:,3).*apriori2(:,2)+apriorierror2(:,3).*apriori2(:,2)+apriorierror(:,2).*apriori2(:,3),heights,'g-')
+        % xlim([0 2000])
+        % hold off
+        
+        % subplot(2,2,4)
+        % plot(r_param_orig(:,5),heights,'ko')
+        % hold on
+        % plot(r_param_orig(:,5)+r_error_orig(:,5),heights,'b-')
+        % plot(r_param_rcorr(:,5),heights,'r-')
+        % plot(apriori2(:,5)+apriorierror2(:,5),heights,'g-')
+        % xlim([-1 1]*200)
+        % hold off
+
+        
+        
+        % for ihei=1:nhei
+        %     disp(heights(ihei))
+        %     disp(r_error_orig(ihei,[1,2,3,5]))
+        %     disp(r_error_rcorr(ihei,[1,2,3,5]))
+        %     disp(apriorierror2(ihei,[1,2,3,5]))
+        % end
         
     else
         % Prior for the very first time step or after a long data gap from the IRI model. apriori2 already contains the IRI parameters, except for Ne which might be from power profiles, just form the error array here.

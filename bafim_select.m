@@ -7,8 +7,8 @@ function bafim_select( datadir , restype )
 % INPUT:
 %   datadir  a directory containing bafim_smoother outputs
 %
-% UTPUT:
-%   restype  'filter', 'smooth', 'rcorr', or 'r_cors'.
+% OUTPUT:
+%   restype  'filter', 'smooth', 'rcorr', or 'rcors'.
 %            'rcorr' are the parameter profiles smoothed in range,
 %            before adding the boundary conditions and process noise.
 %
