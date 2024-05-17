@@ -77,8 +77,19 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
         end
         nf = l-1;
     else
-        df = dir(fullfile(datadir,'*.mat'));
+        if iscell(datadir)
+            df = [];
+            for k=1:length(datadir)
+                df = [df;dir(fullfile(datadir{k},'*.mat'))];
+            end
+        else
+            df = dir(fullfile(datadir,'*.mat'));
+        end
         nf  = length(df);
+        % sort by file names (will fail if year changes, but this does not have severe consequences)
+        Tdf = struct2table(df);
+        sortedT = sortrows(Tdf,'name');
+        df = table2struct(sortedT);
     end
 
     % physically reasonable limits for the plasma parameters
@@ -91,7 +102,8 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
 
         % read the data
         if ~mergedfile
-            dfpath = fullfile(datadir,df(k).name);
+            %            dfpath = fullfile(datadir,df(k).name);
+            dfpath = fullfile(df(k).folder,df(k).name);
             dd = load(dfpath);
         else
             fname = ['data' flist(k).fname((end-11):(end-4))];

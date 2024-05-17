@@ -13,14 +13,24 @@ function bafim_flipchem_select( datadir , restype )
 %
 % IV 2020
 %
-    df = dir(fullfile(datadir,'*.mat'));
+    if iscell(datadir)
+        df = [];
+        for k=1:length(datadir)
+            df = [df;dir(fullfile(datadir{k},'*.mat'))];
+        end
+    else
+        df = dir(fullfile(datadir,'*.mat'));
+    end
+    
+    %    df = dir(fullfile(datadir,'*.mat'));
 
     nf  = length(df);
 
     for k=1:nf
         
         % read the data
-        dfpath = fullfile(datadir,df(k).name);
+        %        dfpath = fullfile(datadir,df(k).name);
+        dfpath = fullfile(df(k).folder,df(k).name);
         dd = load(dfpath);
 
         switch lower(restype(1:5))
