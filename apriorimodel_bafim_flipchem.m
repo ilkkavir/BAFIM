@@ -222,6 +222,11 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                 r_error(hind,1:6) = apriorierrorprev(hind,1:6);
                 r_error(hind,7:end) = 0;
             end
+
+            % set r_status to zero if it was 3 because O+ fraction is slightly above 1
+            if r_status(hind)==3 & r_param(hind,6)>1 & r_param(hind,6)<1.1
+                r_status(hind) = 0;
+            end
         end
 
         % exclude weak echoes on the top side
@@ -285,6 +290,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         fc = py.flipchem.Flipchem(pydate);
         O2p = r_param(:,1).*NaN;
         NOp = r_param(:,1).*NaN;
+        NO  = r_param(:,1).*NaN;
 
         % fms options...
         fms_opts = optimset('fminsearch');
@@ -456,12 +462,13 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
             end
             
             try
-                % the molecular ions
+                % the molecular ions and neutral NO
                 outputs = fc.get_point(glat,glon,galt,r_param(hind,1),r_param(hind,2)*r_param(hind,3),r_param(hind,2));
-                O2p(hind) = outputs{5}/r_param(1);
-                NOp(hind) = outputs{6}/r_param(1);
+                O2p(hind) = outputs{5}/r_param(hind,1);
+                NOp(hind) = outputs{6}/r_param(hind,1);
+                NO(hind) = outputs{9};
                 if isnan(O2p(hind)) | isnan(NOp(hind))
-                    error('NaN compositio, skipping the flipchem fit.');
+                    error('NaN composition, skipping the flipchem fit.');
                 end
             catch me
                 disp(me.message);
@@ -694,7 +701,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         while ~savesuccess
             savesuccess = true;
             try
-                save(outfile,'BAFIM_G','r_param','r_error','r_status','r_param_filter','r_error_filter','r_param_rcorr','r_error_rcorr','r_dp','O2p','NOp','kdeb','-append');
+                save(outfile,'BAFIM_G','r_param','r_error','r_status','r_param_filter','r_error_filter','r_param_rcorr','r_error_rcorr','r_dp','O2p','NOp','NO','kdeb','-append');
             catch
                 savesuccess = false;
                 itry = itry + 1;
