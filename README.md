@@ -18,11 +18,12 @@ Ilkka Virtanen (ilkka.i.virtanen@oulu.fi) 2024
 
 2. Add the following lines in the end of the standard GUISDAP function ionomodel in the file anal/ionomodel.m (before the last end statement)
 
-> apriorimodel=['apriorimodel_' iono_model];
-> if exist([apriorimodel '.m'])
->   [apriori,apriorierror] = feval(apriorimodel,apriori,apriorierror,heights,fit_altitude);
-> end
-
+```
+apriorimodel=['apriorimodel_' iono_model];
+if exist([apriorimodel '.m'])
+  [apriori,apriorierror] = feval(apriorimodel,apriori,apriorierror,heights,fit_altitude);
+end
+```
 
 
 ## How to use the module?
@@ -45,12 +46,14 @@ To use BAFIM in GUISDAP fits:
 
 2. Set the lowest (hmin) and highest (hmax) altitude where each parameter is fitted, and scaling factors for process noise (st) and correlation length (sh) using the first four colums and six rows of the 'fit_altitude' array:
 
-> fit_altitude(1:6,1:4) = [ hmin_Ne , hmax_Ne , sh_Ne , st_Ne;  
->                           hmin_Ti , hmax_Ti , sh_Ti , st_Ti;  
->                           hmin_Tr , hmax_Tr , sh_Tr , st_Tr;  
->                              0    ,    0    ,   0   ,   0  ;  
->                           hmin_Vi , hmax_Vi , sh_Vi , st_Vi;  
->                           hmin_Op , hmax_Op , sh_Op , st_Op ]  
+```
+fit_altitude(1:6,1:4) = [ hmin_Ne , hmax_Ne , sh_Ne , st_Ne;  
+                          hmin_Ti , hmax_Ti , sh_Ti , st_Ti;  
+                          hmin_Tr , hmax_Tr , sh_Tr , st_Tr;  
+                             0    ,    0    ,   0   ,   0  ;  
+                          hmin_Vi , hmax_Vi , sh_Vi , st_Vi;  
+                          hmin_Op , hmax_Op , sh_Op , st_Op ]  
+```
 
 For example:
 ```
@@ -101,12 +104,14 @@ iono_model='bafim_flipchem'
 
 2. Set the lowest (hmin) and highest (hmax) altitude where each parameter is fitted, and scaling factors for process noise (st) and correlation length (sh) using the first four colums and six rows of the 'fit_altitude' array:
 
-> fit_altitude(1:6,1:4) = [ hmin_Ne , hmax_Ne , sh_Ne , st_Ne;  
->                           hmin_Ti , hmax_Ti , sh_Ti , st_Ti;  
->                           hmin_Tr , hmax_Tr , sh_Tr , st_Tr;  
->                              0    ,    0    ,   0   ,   0  ;  
->                           hmin_Vi , hmax_Vi , sh_Vi , st_Vi;  
->                           hmin_Op , hmax_Op , sh_Op , st_Op ]  
+```
+fit_altitude(1:6,1:4) = [ hmin_Ne , hmax_Ne , sh_Ne , st_Ne;  
+                          hmin_Ti , hmax_Ti , sh_Ti , st_Ti;  
+                          hmin_Tr , hmax_Tr , sh_Tr , st_Tr;  
+                             0    ,    0    ,   0   ,   0  ;  
+                          hmin_Vi , hmax_Vi , sh_Vi , st_Vi;  
+                          hmin_Op , hmax_Op , sh_Op , st_Op ]  
+```
 
 For example:
 
