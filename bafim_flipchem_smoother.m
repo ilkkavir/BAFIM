@@ -270,8 +270,8 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
         r_apriorierror_next = dd.r_apriorierror;
 
 
-        r_param = r_param_smooth;
-        r_error = r_error_smooth;
+        r_param = r_param_rcorr_smooth;
+        r_error = r_error_rcorr_smooth;
 
         r_dp = r_param(:,6);
 

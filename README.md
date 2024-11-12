@@ -14,14 +14,14 @@ Ilkka Virtanen (ilkka.i.virtanen@oulu.fi) 2024
 
 ## INSTALLATION
 
-1. copy the files somewhere in your MATLAB path, for example the GUISDAP anal/ directory.
+1. Copy the files somewhere in your MATLAB path, for example the GUISDAP anal/ directory.
 
-2. add the following lines in the end of the standard GUISDAP function ionomodel in the file anal/ionomodel.m (before the last end statement)
+2. Add the following lines in the end of the standard GUISDAP function ionomodel in the file anal/ionomodel.m (before the last end statement)
 
-    apriorimodel=['apriorimodel_' iono_model];
-    if exist([apriorimodel '.m'])
-        [apriori,apriorierror] = feval(apriorimodel,apriori,apriorierror,heights,fit_altitude);
-    end
+> apriorimodel=['apriorimodel_' iono_model];
+> if exist([apriorimodel '.m'])
+>   [apriori,apriorierror] = feval(apriorimodel,apriori,apriorierror,heights,fit_altitude);
+> end
 
 
 
@@ -45,25 +45,29 @@ To use BAFIM in GUISDAP fits:
 
 2. Set the lowest (hmin) and highest (hmax) altitude where each parameter is fitted, and scaling factors for process noise (st) and correlation length (sh) using the first four colums and six rows of the 'fit_altitude' array:
 
-        fit_altitude(1:6,1:4) = [ hmin_Ne , hmax_Ne , sh_Ne , st_Ne;
-                                  hmin_Ti , hmax_Ti , sh_Ti , st_Ti;
-                                  hmin_Tr , hmax_Tr , sh_Tr , st_Tr;
-			                         0    ,    0    ,   0   ,   0  ;
-			                      hmin_Vi , hmax_Vi , sh_Vi , st_Vi;
-			                      hmin_Op , hmax_Op , sh_Op , st_Op ]
-For example:
+> fit_altitude(1:6,1:4) = [ hmin_Ne , hmax_Ne , sh_Ne , st_Ne;  
+>                           hmin_Ti , hmax_Ti , sh_Ti , st_Ti;  
+>                           hmin_Tr , hmax_Tr , sh_Tr , st_Tr;  
+>                              0    ,    0    ,   0   ,   0  ;  
+>                           hmin_Vi , hmax_Vi , sh_Vi , st_Vi;  
+>                           hmin_Op , hmax_Op , sh_Op , st_Op ]  
 
-        fit_altitude(1:6,1:4) = [   0 , Inf , 0.1 ,  2e11 ;
-		        	               80 , Inf , 0.3 ,    10 ;
-                       			  103 , Inf , 0.3 ,  0.05 ;
-	                      		    0 ,   0 ,   0 ,     0 ;
-	                      		   80 , Inf , 0.2 ,   2.5 ;
-                    			  130 , 350 , 0.2 , 0.003 ]
+For example:
+```
+fit_altitude(1:6,1:4) = [   0 , Inf , 0.1 ,  2e11 ;  
+                           80 , Inf , 0.3 ,    10 ;  
+                          103 , Inf , 0.3 ,  0.05 ;  
+                            0 ,   0 ,   0 ,     0 ;  
+                           80 , Inf , 0.2 ,   2.5 ;  
+                          130 , 350 , 0.2 , 0.003 ]  
+```
 
 3. Tell the GUISDAP satellite check routine not to create gaps in the lag profiles and set transmitter phase pushing to zero:
 
-        a_phasepush=0
-        a_satch.cut=0
+```
+a_phasepush=0  
+a_satch.cut=0
+```
 
 4. Start GUISDAP analysis as usual (hit 'GO')
 
@@ -72,7 +76,9 @@ For example:
 
 To run the RTS smoother, use the command:
 
-        bafim_smoother(<guisdap-output-dir>)
+```
+bafim_smoother(<guisdap-output-dir>)
+```
 
 After the smoothing step the Bayesian smoothing results are stored in variables r_param and r_error, as well as in r_param_smooth and r_error_smooth, while the Bayesian filtering outputs are in r_param_filter and r_error_filter. The results stored in the data files under r_param and r_error may be selected using the function bafim_select. 
 
@@ -89,30 +95,38 @@ To use BAFIM_flipchem in GUISDAP fits:
 
 1. Select 'bafim' as the ionospheric model in GUISDAP, i.e. write the following in the 'Special' box of the 'GUISDAP for dummies' window:
 
-    iono_model='bafim_flipchem'
+```
+iono_model='bafim_flipchem'
+```
 
 2. Set the lowest (hmin) and highest (hmax) altitude where each parameter is fitted, and scaling factors for process noise (st) and correlation length (sh) using the first four colums and six rows of the 'fit_altitude' array:
 
-        fit_altitude(1:6,1:4) = [ hmin_Ne , hmax_Ne , sh_Ne , st_Ne;
-                                  hmin_Ti , hmax_Ti , sh_Ti , st_Ti;
-                                  hmin_Tr , hmax_Tr , sh_Tr , st_Tr;
-			                         0    ,    0    ,   0   ,   0  ;
-			                      hmin_Vi , hmax_Vi , sh_Vi , st_Vi;
-			                      hmin_Op , hmax_Op , sh_Op , st_Op ]
+> fit_altitude(1:6,1:4) = [ hmin_Ne , hmax_Ne , sh_Ne , st_Ne;  
+>                           hmin_Ti , hmax_Ti , sh_Ti , st_Ti;  
+>                           hmin_Tr , hmax_Tr , sh_Tr , st_Tr;  
+>                              0    ,    0    ,   0   ,   0  ;  
+>                           hmin_Vi , hmax_Vi , sh_Vi , st_Vi;  
+>                           hmin_Op , hmax_Op , sh_Op , st_Op ]  
+
 For example:
 
-        fit_altitude(1:6,1:4) = [   0 , Inf , 0.05 ,  2.5e11 ;
-		        	               80 , Inf , 0.10 ,      30 ;
-                       			   97 , Inf , 0.10 ,    0.03 ;
-	                      		    0 ,   0 ,    0 ,       0 ;
-	                      		   80 , Inf , 0.05 ,     2.5 ;
-                    			  150 , 500 , 0.05 ,    0.01 ]
+```
+fit_altitude(1:6,1:4) = [   0 , Inf , 0.05 ,  2.5e11 ;  
+                           80 , Inf , 0.10 ,      30 ;  
+                   	   97 , Inf , 0.10 ,    0.03 ;  
+                            0 ,   0 ,    0 ,       0 ;  
+                      	   80 , Inf , 0.05 ,     2.5 ;  
+                          150 , 500 , 0.05 ,    0.01 ]  
+```
+
 **Notice that the numbers are different from those in the orignal BAFIM, because the length scales scale with time step duration and the chemistry model supports the composition fits.**
 
 3. Tell the GUISDAP satellite check routine not to create gaps in the lag profiles and set transmitter phase pushing to zero:
 
-        a_phasepush=0
-        a_satch.cut=0
+```
+a_phasepush=0
+a_satch.cut=0
+```
 
 4. Start GUISDAP analysis as usual (hit 'GO')
 
@@ -120,8 +134,9 @@ For example:
 
 To run the RTS smoother, use the command:
 
-        bafim_flipchem_smoother(<guisdap-output-dir>)
-
+```
+bafim_flipchem_smoother(<guisdap-output-dir>)
+```
 
 Four different results are stored in each data file after the smoothing step,
 
