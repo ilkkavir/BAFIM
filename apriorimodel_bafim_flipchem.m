@@ -227,6 +227,10 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
             if r_status(hind)==3 & r_param(hind,6)>1 & r_param(hind,6)<1.1
                 r_status(hind) = 0;
             end
+            % set r_status to zero if it was 3 because O+ fraction is slightly below 1
+            if r_status(hind)==3 & r_param(hind,6)<0 & r_param(hind,6)>-.1
+                r_status(hind) = 0;
+            end
         end
 
         % exclude weak echoes on the top side
