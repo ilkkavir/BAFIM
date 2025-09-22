@@ -167,6 +167,7 @@ After the smoothing step the Bayesian smoothing results are stored in variables 
 All papers making use of BAFIM_flipchem should contain a reference to [Virtanen et al., 2024](https://doi.org/10.1029/2023JA032202). In addition, all papers that use the Flipchem module should contain references to [Richards et al., 2010](https://doi.org/10.1029/2009RS004332) and to [Reimer et al., 2021](https://doi.org/10.5281/zenodo.3688853), and should contain the following Acknowledgement,
 “The software and data products on the AMISR project are supported by the US NSF grant AGS #1840962 to SRI International.”
 
+All papers making use of the original version of BAFIM should contain a reference to [Virtanen et al., 2021](https://doi.org/10.1029/2020JA028700).
 
 ## References
 
