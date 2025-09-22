@@ -20,7 +20,7 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
 %
     global path_GUP
 
-    persistent r_param_smooth_next r_error_smooth_next r_apriori_next r_apriorierror_next
+    %    persistent r_param_smooth_next r_error_smooth_next r_apriori_next r_apriorierror_next
 
     if nargin < 3
         newoutfile = false;
@@ -184,7 +184,8 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
 
                 % correlation prior considered to be part of the update step
                 r_param_rcorr_smooth_s(ihei,[1 2 3 5 6]) = r_param_rcorr_s(ihei,[1 2 3 5 6]) + (r_error_rcorr_s(ihei,[1 2 3 5 6]).^2./r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2).*(r_param_rcorr_smooth_next_s(ihei,[1 2 3 5 6]) - r_apriori_next_s(ihei,[1 2 3 5 6]));
-                r_error_rcorr_smooth_s(ihei,[1 2 3 5 6]) = sqrt( r_error_rcorr_s(ihei,[1 2 3 5 6]).^2 + (r_error_rcorr_smooth_s(ihei,[1 2 3 5 6]).^2 ./ r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2).^2 .* (r_error_rcorr_smooth_next_s(ihei,[1 2 3 5 6]) - r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2) );
+
+                r_error_rcorr_smooth_s(ihei,[1 2 3 5 6]) = sqrt( r_error_rcorr_s(ihei,[1 2 3 5 6]).^2 + (r_error_rcorr_s(ihei,[1 2 3 5 6]).^2 ./ r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2).^2 .* (r_error_rcorr_smooth_next_s(ihei,[1 2 3 5 6]).^2 - r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2) );
                 %
             end
             m_k_smooth = m_k + dd.BAFIM_G * ( m_k1_smooth - m_k1_pred);
