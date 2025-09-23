@@ -183,10 +183,38 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
                 P_k1_pred( ((0:4)*nhei+ihei) , ((0:4)*nhei+ihei) ) = diag(r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2);
 
                 % correlation prior considered to be part of the update step
-                r_param_rcorr_smooth_s(ihei,[1 2 3 5 6]) = r_param_rcorr_s(ihei,[1 2 3 5 6]) + (r_error_rcorr_s(ihei,[1 2 3 5 6]).^2./r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2).*(r_param_rcorr_smooth_next_s(ihei,[1 2 3 5 6]) - r_apriori_next_s(ihei,[1 2 3 5 6]));
+                % with diagonal error covariances
+                % r_param_rcorr_smooth_s(ihei,[1 2 3 5 6]) = r_param_rcorr_s(ihei,[1 2 3 5 6]) + (r_error_rcorr_s(ihei,[1 2 3 5 6]).^2./r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2).*(r_param_rcorr_smooth_next_s(ihei,[1 2 3 5 6]) - r_apriori_next_s(ihei,[1 2 3 5 6]));
 
-                r_error_rcorr_smooth_s(ihei,[1 2 3 5 6]) = sqrt( r_error_rcorr_s(ihei,[1 2 3 5 6]).^2 + (r_error_rcorr_s(ihei,[1 2 3 5 6]).^2 ./ r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2).^2 .* (r_error_rcorr_smooth_next_s(ihei,[1 2 3 5 6]).^2 - r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2) );
-                %
+                % r_error_rcorr_smooth_s(ihei,[1 2 3 5 6]) = sqrt( r_error_rcorr_s(ihei,[1 2 3 5 6]).^2 + (r_error_rcorr_s(ihei,[1 2 3 5 6]).^2 ./ r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2).^2 .* (r_error_rcorr_smooth_next_s(ihei,[1 2 3 5 6]).^2 - r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2) );
+
+                % Switched to full covariance matrices whenever available
+                % 
+                % covariance matrix at time step k after filtering
+                Pk = vec2covm(r_error_rcorr_s(ihei,:));
+                % select the parameters we actually fit
+                Pkf = Pk([1 2 3 5 6],[1 2 3 5 6]);
+                % inverse of predicted covariance for step k+1 (the prior covariances are diagonal in guisdap)
+                %Pk1p = diag(r_apriorierror_next_s(ihei,:).^2);
+                %Pk1pf = Pk1p([1 2 3 5 6],[1 2 3 5 6]);
+                %Pk1pfi = inv(Pk1pf);
+                Pk1pfi = diag(1./(r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2));
+                % covariance for step k+1 after smoothing
+                Pk1s = vec2covm(r_error_rcorr_smooth_next_s);
+                Pk1sf = Pk1s([1 2 3 5 6],[1 2 3 5 6]);
+                % matrix G in eq 8.6 of Särkkä
+                G = Pkf * Pk1pfi;
+
+                % the smoothed plasma parameters
+                r_param_rcorr_smooth_s(ihei,[1 2 3 5 6]) = r_param_rcorr_s(ihei,[1 2 3 5 6])' + G * (r_param_rcorr_smooth_next_s(ihei,[1 2 3 5 6])' - r_apriori_next_s(ihei,[1 2 3 5 6])');
+
+                % covariance of the smoothed parameters
+                Pksf = Pkf + G*( Pk1sf - Pk1pfi ) * G';
+                Pksmooth = Pk;
+                Pksmooth([1 2 3 5 6],[1 2 3 5 6]) = Pksf;
+                r_error_rcorr_s(ihei,:) = covm2vec(Pksmooth);
+                
+                
             end
             m_k_smooth = m_k + dd.BAFIM_G * ( m_k1_smooth - m_k1_pred);
             P_k_smooth = P_k + dd.BAFIM_G * ( P_k1_smooth - P_k1_pred ) * dd.BAFIM_G';
