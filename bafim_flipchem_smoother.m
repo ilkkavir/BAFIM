@@ -16,7 +16,7 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
 %
 %
 %
-% IV 2020
+% IV 2020-
 %
     global path_GUP
 
@@ -30,28 +30,7 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
         mergedfile = false;
     end
     
-    % if isdir(datadir)
-    %     df = dir(fullfile(datadir,'*.mat'));
-    %     nf  = length(df);
-    %     merfedfile = false;
-    % else
-    %     fnames = sort(fieldnames(matfile(datadir)));
-    %     l = 1;
-    %     flist = [];
-    %     for k=1:length(fnames)
-    %         fname = char(fnames(k));
-    %         if length(fname)==12
-    %             if fname(1:4)=='data'
-    %                 flist(l).file = str2num(fname(5:12));
-    %                 flist(l).fname = fullfile(fileparts(datadir),[fname(5:12) '.mat']);
-    %                 l = l+1;
-    %             end
-    %         end
-    %     end
-    %     nf = length(flist); 
-    %     mergedfile = true;
-    % end
-
+    % merged output files used when large number of files becomes a problem
     if mergedfile
         % file names of the merged files must start with "GUISDAP"
         df = dir(fullfile(datadir,'GUISDAP*.mat'))
@@ -76,7 +55,8 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
             end
         end
         nf = l-1;
-    else
+        
+    else % default GUISDAP mat-files
         if iscell(datadir)
             df = [];
             for k=1:length(datadir)
@@ -96,13 +76,13 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
     paramlims = [1e6 1 .01 1 -2e4 -.01 ; 1e14 2e4 100 1e9 2e4 1.01];
 
     for k=nf:-1:1
+        % the GUISDAP vec2covm function is in init directory
         if k==nf
             addpath(fullfile(path_GUP,'init'))
         end
 
         % read the data
         if ~mergedfile
-            %            dfpath = fullfile(datadir,df(k).name);
             dfpath = fullfile(df(k).folder,df(k).name);
             dd = load(dfpath);
         else
@@ -113,16 +93,33 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
         % number of height gates (actually, the present version cannot handle changes in nhei)
         nhei = length(dd.r_h);
 
-        % The unsmoothed data will be written in r_param_filter and r_error_filter, and 
-        % the smoothed ones in both r_param_smooth & r_error_smooth, and r_param & r_error.
-        % Use r_param_filter & r_error_filter if they exists, otherwise read r_param & r_error.
-        % Then we do not have problems if the smoother is accidentially run more than once
+
+        % We will make two version of smoothed data.
+        % 1. Considering the smoothness prior in altitude to be part of the prediction step.
+        %    Use results before applying the prior in altitude and model the prior in altitude
+        %    in the prediction step.
+        % 2. Considering the smoothness prior in altitude to be part of the update step. Use results smoothed
+        %    in altitude. The prediction step reduces to adding process noise. 
+        %
+        % Either choice can be justified. Risk of biasing the results with the prior model may be
+        % smaller in (1), while (2) makes optimal use of all prior information and gives the most
+        % accurate results. (1) was used in Virtanen et al. (2021) and Tesfaw et al. (2022), while (2) was
+        % used in Virtanen et al. (2024) and Partamies et al. (2025). 
+        %
+        % The plasma parameters and their error are written in following arrays.
+        % - r_param_filter and r_error_filter    Filtering in time, before altitude prior
+        % - r_param_rcorr and r_error_rcorr      Filtering in time + altitude prior
+        % - r_param_smooth and r_error_smooth    Smoothing in time, option (1)
+        % - r_param_rcorr_smooth and r_error_rcorr_smooth Smoothing in time, option (2)
+        %
+        % r_param_rcorr_smooth and r_error_rcorr_smooth are copied to r_param and r_error in the end. 
+        %
 
 
         % correlation prior considered to be a part of the prediction step
         if isfield(dd,'r_param_filter')
             r_param_filter = dd.r_param_filter;
-        else
+        else % r_param_filter is missing from the last time step, but the same data are in r_param
             r_param_filter = dd.r_param;
         end
         if isfield(dd,'r_error_filter')
@@ -143,8 +140,11 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
             r_error_rcorr = dd.r_error;
         end
 
+        % the backward recursion starts from time step nf-1. Check for BAFIM_G to find possible filter restarts after data gaps. 
         if k < nf & isfield(dd,'BAFIM_G')
 
+            % switch to scaled units for better numerical stability
+            % correlation prior considered to be part of the prediction step
             r_param_filter_s = real_to_scaled( r_param_filter );
             r_error_filter_s = real_to_scaled( r_error_filter);
             r_param_smooth_next_s = real_to_scaled( r_param_smooth_next);
@@ -159,35 +159,49 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
             r_error_rcorr_smooth_next_s = real_to_scaled( r_error_rcorr_smooth_next);
             r_param_rcorr_smooth_s = r_param_rcorr_s;
             r_error_rcorr_smooth_s = r_error_rcorr_s;
-            %
-            
+
+            % most of the following is for option (1), i.e. correlation prior is part of the prediction step.
+            % option (2) is marked in the comments
+            % error covariance matrix of the 5 fitted parameters in current time step (k)
             P_k = zeros(nhei*5,nhei*5);
+            % error covariance matrix of the Bayesian filter output in time step k+1
             P_k1_smooth = zeros(nhei*5,nhei*5);
+            % fitted parameters in step k
             m_k = NaN(nhei*5,1);
+            % Bayesian smoothing result in step k+1
             m_k1_smooth = NaN(nhei*5,1);
+            % Predicted parameter values in step k+1
             m_k1_pred = NaN(nhei*5,1);
+            % Predicted error covariance in step k+1
             P_k1_pred = zeros(nhei*5,nhei*5);
+            % loop over all altitude gates
             for ihei = 1:nhei
+                % error covariance matrix of the filter (forward) output
                 fitcov = vec2covm(r_error_filter_s(ihei,:));
-                P_k( ((0:4)*nhei+ihei) , ((0:4)*nhei+ihei) ) = fitcov([1 2 ...
-                                    3 5 6],[1 2 3 5 6]);
+                % select the parameters we actually fit
+                P_k( ((0:4)*nhei+ihei) , ((0:4)*nhei+ihei) ) = fitcov([1 2 3 5 6],[1 2 3 5 6]);
+                % the corresponding fit results
                 m_k( ((0:4)*nhei)+ihei ) = r_param_filter_s(ihei,[1 2 3 5 6]);
 
+                % error covariance of the final Bayesian smoother output in step k+1
                 fitcov = vec2covm(r_error_smooth_next_s(ihei,:));
-                P_k1_smooth( ((0:4)*nhei+ihei) , ((0:4)*nhei+ihei) ) = fitcov([1 2 ...
-                                    3 5 6],[1 2 3 5 6]);
+                % select the parameters we actually fit
+                P_k1_smooth( ((0:4)*nhei+ihei) , ((0:4)*nhei+ihei) ) = fitcov([1 2 3 5 6],[1 2 3 5 6]);
+                % Final parameters after Bayesian smoothing step k+1
                 m_k1_smooth( ((0:4)*nhei)+ihei ) = r_param_smooth_next_s(ihei,[1 2 3 5 6]);
-
+                % Predicted parameters for step k+1
                 m_k1_pred( ((0:4)*nhei)+ihei ) = r_apriori_next_s(ihei,[1 2 3 5 6]);
-
+                % Predicted error covariance for step k+1
                 P_k1_pred( ((0:4)*nhei+ihei) , ((0:4)*nhei+ihei) ) = diag(r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2);
 
+                
                 % correlation prior considered to be part of the update step
                 % with diagonal error covariances
                 % r_param_rcorr_smooth_s(ihei,[1 2 3 5 6]) = r_param_rcorr_s(ihei,[1 2 3 5 6]) + (r_error_rcorr_s(ihei,[1 2 3 5 6]).^2./r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2).*(r_param_rcorr_smooth_next_s(ihei,[1 2 3 5 6]) - r_apriori_next_s(ihei,[1 2 3 5 6]));
 
                 % r_error_rcorr_smooth_s(ihei,[1 2 3 5 6]) = sqrt( r_error_rcorr_s(ihei,[1 2 3 5 6]).^2 + (r_error_rcorr_s(ihei,[1 2 3 5 6]).^2 ./ r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2).^2 .* (r_error_rcorr_smooth_next_s(ihei,[1 2 3 5 6]).^2 - r_apriorierror_next_s(ihei,[1 2 3 5 6]).^2) );
 
+                % Correlation prior in altitude considered to be part of the update step (option 2)
                 % Switched to full covariance matrices whenever available
                 % 
                 % covariance matrix at time step k after filtering
@@ -210,47 +224,59 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
 
                 % covariance of the smoothed parameters
                 Pksf = Pkf + G*( Pk1sf - Pk1pfi ) * G';
+                % Put the covariances to corresponding elements of the full error covariance matrix
                 Pksmooth = Pk;
                 Pksmooth([1 2 3 5 6],[1 2 3 5 6]) = Pksf;
+                % convert the error covariance to GUISDAP vector format
                 r_error_rcorr_s(ihei,:) = covm2vec(Pksmooth);
                 
                 
             end
+
+            % Back to option (1)
+            % Fitted parameters after Bayesian smoothing
             m_k_smooth = m_k + dd.BAFIM_G * ( m_k1_smooth - m_k1_pred);
+            % The corresponding error covariance
             P_k_smooth = P_k + dd.BAFIM_G * ( P_k1_smooth - P_k1_pred ) * dd.BAFIM_G';
 
-            r_param_smooth_s = real_to_scaled(r_param);
-            r_param_smooth_s(:,1) = m_k_smooth(1:nhei);
-            r_param_smooth_s(:,2) = m_k_smooth((nhei+1):(2*nhei));
-            r_param_smooth_s(:,3) = m_k_smooth((2*nhei+1):(3*nhei));
-            r_param_smooth_s(:,5) = m_k_smooth((3*nhei+1):(4*nhei));
-            r_param_smooth_s(:,6) = m_k_smooth((4*nhei+1):(5*nhei));
+            % Form the plasma parameter array after Bayesian smoothing in time
+            r_param_smooth_s = real_to_scaled(r_param); % copy the input array (only model values will be left from this)
+            r_param_smooth_s(:,1) = m_k_smooth(1:nhei); % Ne
+            r_param_smooth_s(:,2) = m_k_smooth((nhei+1):(2*nhei)); % Ti
+            r_param_smooth_s(:,3) = m_k_smooth((2*nhei+1):(3*nhei)); % Tr
+            r_param_smooth_s(:,5) = m_k_smooth((3*nhei+1):(4*nhei)); % Vi
+            r_param_smooth_s(:,6) = m_k_smooth((4*nhei+1):(5*nhei)); % O+
 
-            r_error_smooth_s = real_to_scaled(r_error);
+            % Measurement errors after Bayesian smoothing
+            r_error_smooth_s = real_to_scaled(r_error); % copy the input
+            % Pick the variances (correlations in altitude will not be stored) 
             var_k_smooth = diag(P_k_smooth);
-            r_error_smooth_s(:,1) = sqrt(var_k_smooth(1:nhei));
-
-            r_error_smooth_s(:,2) = sqrt(var_k_smooth((nhei+1):(2*nhei)));
-            r_error_smooth_s(:,3) = sqrt(var_k_smooth((2*nhei+1):(3*nhei)));
-            r_error_smooth_s(:,5) = sqrt(var_k_smooth((3*nhei+1):(4*nhei)));
-            r_error_smooth_s(:,6) = sqrt(var_k_smooth((4*nhei+1):(5*nhei)));
+            % standard deviations
+            r_error_smooth_s(:,1) = sqrt(var_k_smooth(1:nhei));  % Ne
+            r_error_smooth_s(:,2) = sqrt(var_k_smooth((nhei+1):(2*nhei))); % Ti
+            r_error_smooth_s(:,3) = sqrt(var_k_smooth((2*nhei+1):(3*nhei))); % Tr
+            r_error_smooth_s(:,5) = sqrt(var_k_smooth((3*nhei+1):(4*nhei))); % Vi
+            r_error_smooth_s(:,6) = sqrt(var_k_smooth((4*nhei+1):(5*nhei))); % O+
             
 
+            % Back to physical units
             r_param_smooth = scaled_to_real(r_param_smooth_s);
             r_error_smooth = scaled_to_real(r_error_smooth_s);
 
-            %
+            % Option (2) in physical units
             r_param_rcorr_smooth = scaled_to_real(r_param_rcorr_smooth_s);
             r_error_rcorr_smooth = scaled_to_real(r_error_rcorr_smooth_s);
-            %
+            
         else
+
+            % Initialize the filter with what we have available from the last time step
             r_param_smooth = r_param_filter;
             r_error_smooth = r_error_filter;
 
             %
             r_param_rcorr_smooth = r_param_rcorr;
             r_error_rcorr_smooth = r_error_rcorr;
-            %
+            
         end
 
         % replace NaN's with the filter values
@@ -262,7 +288,7 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
             warning('NaN value in smoother output, replacing with the filter output.')
         end
 
-        % replace NaN's with the filter values: rcorr
+        % replace NaN's with the filter values (option 2)
         indnan_par = isnan(r_param_rcorr_smooth);
         indnan_err = isnan(r_error_rcorr_smooth);
         if any(any(indnan_par)) | any(any(indnan_err))
@@ -270,7 +296,7 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
             r_error_rcorr_smooth = r_error_rcorr;            
             warning('NaN value in smoother output, replacing with the filter output.')
         end
-        %
+        
 
         % make sure that the smoothed values are within paramlims, this should rarely have any effect
         for ihei=1:nhei
@@ -286,14 +312,15 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
         % points with std <= 1e-3 are points fixed to model values, put the model values in these points
         r_param_smooth(r_error_filter(:,1:6)<=1e-3) = r_param_filter(r_error_filter(:,1:6)<=1e-3);
         r_param_rcorr_smooth(r_error_rcorr(:,1:6)<=1e-3) = r_param_rcorr(r_error_rcorr(:,1:6)<=1e-3);
-        
+
+
+        % store values needed for the next iteration step
         r_param_smooth_next = r_param_smooth;
         r_error_smooth_next = r_error_smooth;
 
-        %
         r_param_rcorr_smooth_next = r_param_rcorr_smooth;
         r_error_rcorr_smooth_next = r_error_rcorr_smooth;
-        %
+
         
         r_apriori_next = dd.r_apriori;
         r_apriorierror_next = dd.r_apriorierror;
@@ -302,12 +329,14 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
         r_param = r_param_rcorr_smooth;
         r_error = r_error_rcorr_smooth;
 
+        % GUISDAP vizu assumes that O+ fraction is also in r_dp
         r_dp = r_param(:,6);
 
-        if ~mergedfile
+        % write the results to the output file
+        if ~mergedfile % default GUISDAP mat files
             save(dfpath,'r_param','r_param_smooth','r_param_filter','r_error','r_error_smooth','r_error_filter','r_param_rcorr_smooth','r_error_rcorr_smooth','r_dp','-append');
             fprintf("\r %s",dfpath)
-        else
+        else % merged files
 
             % this is slow even with one-hour files. Should we first save individual files and then merge them?
             % -- may work otherwise, but would need to make sure that too many files do not exist at the same time
@@ -355,12 +384,7 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
             end
             disp(itry)
 
-            % dfpath = fullfile(datadir,flist(k).fname);
-            % save(dfpath,'-struct','dd')
-
-            
             fprintf("\r %08d",flist(k).file)
-            %            fprintf("\r %s",dfpath)
 
         end
 
@@ -369,7 +393,7 @@ function bafim_flipchem_smoother( datadir , mergedfile , newoutfile)
     end
 
 
-    % delete the original output files and rename the smoother outputs
+    % delete the original output files and rename the smoother outputs if merged files are used. 
     if mergedfile
         if newoutfile
             for ifile=1:length(df)
