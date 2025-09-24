@@ -50,9 +50,9 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
 %        apriorierror2 standard deviations of the predicted parameters.
 % 
 %
-% See also: bafim_smoother
+% See also: bafim_flipchem_smoother
 %
-% IV 2018-2020
+% IV 2018-2025
 %
     
     
@@ -81,7 +81,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
     % We need to pass some variables from one timestep to another
     persistent d_time_prev aprioriprev apriorierrorprev filename istep tfromstart
 
-
+    % make a  copy of the original GUISDAP fit results
     r_param_orig = r_param;
     r_error_orig = r_error;
 
@@ -140,9 +140,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
     d_time_prev = d_time(2,:);
     
     % The final correlation lengths are products hsXX*H, where H is the plasma scale height as calculated from IRI parameters.
-    H = v_Boltzmann .* apriori(:,2).*(1+apriori(:,3))./2 ... 
-        ./ ( v_amu .* ( apriori(:,6)*16 + 30.5*(1-apriori(:,6)) ) .* 9.82.*(6372./(6372+heights)).^2 );
-
+    H = v_Boltzmann .* apriori(:,2).*(1+apriori(:,3))./2 ./ ( v_amu .* ( apriori(:,6)*16 + 30.5*(1-apriori(:,6)) ) .* 9.82.*(6372./(6372+heights)).^2 );
     hsAlt = H/1000;
 
     % The correlation lengths must scale with time step duration to make the system (somewhat) independent of the step length
@@ -158,8 +156,10 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
     apriori2 = apriori;
     apriorierror2 = apriorierror;
 
+    % an array for k * Debye length
     kdeb = [];
 
+    % counters to re-initialize the filter after data gaps longer than 600 s
     if tstep > 600
         tfromstart = 0;
     else
@@ -170,11 +170,6 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
     if tfromstart > 120
 
     
-    % take prior from IRI on two first time steps and on two steps after a data gap
-    %    if istep>2 & tstep < 600 & tstepprev < 600
-    % if this is not the first time step (either from experiment startup of after a long data gap)
-        %    if istep>1 & tstep < 600
-        
         % Replace unreasonable values with the previous predictions. 
         for hind = 1:nhei
             
@@ -223,17 +218,17 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                 r_error(hind,7:end) = 0;
             end
 
-            % set r_status to zero if it was 3 because O+ fraction is slightly above 1
+            % set r_status to zero if it was 3 only because O+ fraction is slightly above 1
             if r_status(hind)==3 & r_param(hind,6)>1 & r_param(hind,6)<1.1
                 r_status(hind) = 0;
             end
-            % set r_status to zero if it was 3 because O+ fraction is slightly below 1
+            % set r_status to zero if it was 3 only because O+ fraction is slightly below 0
             if r_status(hind)==3 & r_param(hind,6)<0 & r_param(hind,6)>-.1
                 r_status(hind) = 0;
             end
         end
 
-        % exclude weak echoes on the top side
+        % exclude points that suffer from finite Debye length on the topside
         if nhei > 5
             iweak = nhei+1;
 
@@ -266,8 +261,10 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
             %            disp([iweak heights(iweak-1)])
         end
 
+        % make a copy of the cleaned parameters
         r_param_orig_cleaned = r_param;
         r_error_orig_cleaned = r_error;
+        % in scaled units
         r_param_orig_cleaned_s = real_to_scaled(r_param);
         r_error_orig_cleaned_s = real_to_scaled(r_error);
         
@@ -286,7 +283,8 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         % call flipchem directly from the python module
         %
 
-        
+
+        % initialize flipchem for the measurement time
         timetmp = datetime(d_time(2,:));
         pydate = py.datetime.datetime(int32(timetmp.Year),int32(timetmp.Month),int32(timetmp.Day),int32(timetmp.Hour),int32(timetmp.Minute));
         glat = p_XMITloc(1);
@@ -303,7 +301,8 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         % fms_opts.MaxIter=1e6;
         % fms_opts.TolFun=1e-8;
         % fms_opts.TolX=1e-8;
-        
+
+        % update the parameters using flipchem at each altitude
         for hind = 1:nhei
 
             % altitude
@@ -326,11 +325,10 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                     fitpar = diag(covmat) ~= 0;
                     ifitpar = find(fitpar);
 
-                    % the model error with additional scaling by height above 150 km
+                    % the model error with additional scaling by height above 150 km (the std is doubled at every 350 km, because the model is less reliable at heigher altitudes)
                     fcStd = max(1,exp((heights(hind)-150)/(350/log(2)))) * flipchem_modErr_std;
 
                     % a new fit with penalty from deviation from flipchem
-                    %                    [x,fval,exitflag,output] = fminsearch( @(p) SS_flipchem( p , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, flipchem_modErr_std , glat , glon , galt , fc ) , r_param_orig_cleaned_s(hind,fitpar) , fms_opts);
                     [x,fval,exitflag,output] = fminsearch( @(p) SS_flipchem( p , fitpar , r_param_orig_cleaned_s(hind,:) , covmat, fcStd , glat , glon , galt , fc ) , r_param_orig_cleaned_s(hind,fitpar) , fms_opts);
                     
                     % update the parameter vector
@@ -405,11 +403,9 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                     end
                     
                     % regularize a bit if there are unrealistic values (this happens very rarely but would crash the analysis)
-                    % disperrs = false;
                     while any(diag(Hess)<=0)
                         %                    disp('negative in Hess matrix diagonal')
                         Hess = Hess + eye(nparam);
-                        %disperrs = true;
                     end
                     
                     % inverse of the Hessian matrix
@@ -420,7 +416,6 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                         %                    disp('negative in covariance matrix diagonal')
                         Hess = Hess + eye(nparam);
                         invhess = inv(Hess);
-                        %disperrs = true;
                     end
                     
                     % covariance matrix of all parameters
@@ -431,14 +426,9 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                     
                     % convert the covariance matrix into the vector format used in guisdap
                     r_error_s(hind,:) = covm2vec(covmat2);
-                    %r_error_old = r_error; % copy of the old error vector for the disp below...
-                                           % the vector format in real units
-                    r_error(hind,:) = scaled_to_real(r_error_s(hind,:));
 
-                    % if disperrs
-                    %                disp(r_error_old(hind,1:6))
-                    %                disp(r_error(hind,1:6))
-                    % end
+                    % the vector format in physical units
+                    r_error(hind,:) = scaled_to_real(r_error_s(hind,:));
 
                     % final check that everything is ok after the flipchem fit
                     if any(any(isnan(covmat2)))
@@ -583,8 +573,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         Mfit = NaN(nhei*5,1);
         for ihei = 1:nhei
             fitcov = vec2covm(r_error_s(ihei,:));
-            Cfit( ((0:4)*nhei+ihei) , ((0:4)*nhei+ihei) ) = fitcov([1 2 ...
-                                3 5 6],[1 2 3 5 6]);
+            Cfit( ((0:4)*nhei+ihei) , ((0:4)*nhei+ihei) ) = fitcov([1 2 3 5 6],[1 2 3 5 6]);
             Mfit( ((0:4)*nhei)+ihei ) = r_param_s(ihei,[1 2 3 5 6]);
         end
         
@@ -609,13 +598,32 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         ViErrCorr = sqrt(diag(Cpost((3*nhei+1):(4*nhei),(3*nhei+1):(4*nhei))));
         OpErrCorr = sqrt(diag(Cpost((4*nhei+1):(5*nhei),(4*nhei+1):(5*nhei))));
 
-                
-        % Convert the prediction back to physical units
+        
+        % Collect the smoothed parameters and convert back to physical units
         partmp = scaled_to_real([NeCorr(:),TiCorr(:),TrCorr(:),r_param_s(:,4),ViCorr(:),OpCorr(:)]);
-        errtmp = scaled_to_real([NeErrCorr(:),TiErrCorr(:),TrErrCorr(:),r_error_s(:,4),ViErrCorr(:),OpErrCorr(:)]);
+        %errtmp = scaled_to_real([NeErrCorr(:),TiErrCorr(:),TrErrCorr(:),r_error_s(:,4),ViErrCorr(:),OpErrCorr(:)]);
 
+
+        % pick the full covariance matrices and conver to physical units
+        errtmp_s = r_error_s;
+        % indices of fitted parameters in the full arrays
+        ipar1 = [1 2 3 5 6];
+        for ihei = 1:nhei
+            % indices of fitted parameters from this gatesin Cpost
+            ipar2 = (0:4)*nhei + ihei;
+            % initialize the covariance matrix
+            covarhei = vec2covm(r_error_s(ihei,:));
+            % replace covariances of the fitted parameters with values from the smoothing
+            covarhei(ipar1,ipar1) = Cpost(ipar2,ipar2);
+            % convert back to GUISDAP vector format
+            errtmp_s(ihei,:) = covm2vec(covarhei);
+        end
+        % back to physical units
+        errtmp = scaled_to_real(errtmp_s);
+
+        
         % skip the smoothing if the values are insane
-        if ~any(any(isnan(partmp))) & ~any(any(isnan(errtmp))) & all(all(imag(partmp)==0)) & all(all(imag(errtmp)==0)) & ~any(any(errtmp<0))
+        if ~any(any(isnan(partmp))) & ~any(any(isnan(errtmp))) & all(all(imag(partmp)==0)) & all(all(imag(errtmp)==0)) & ~any(any(errtmp(:,1:6)<0))
             
             % Copy the smoothed profiles to the final prior matrix
             apriori2(:,1) = partmp(:,1);
@@ -625,18 +633,6 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
             apriori2(:,6) = partmp(:,6);
             
             % The final prior variances
-            %
-            % THIS IS WRONG, ONE SHOULD CALCULATE SQRT(ERRTEMP^2 + tstep*TsXX^2)
-            %
-            %
-            %
-            % apriorierror2(:,1) = errtmp(:,1) + tsNe*sqrt(tstep)./hsAlt; % smaller process noise on the smooth and low Ne topside
-            % apriorierror2(:,2) = errtmp(:,2) + tsTi*sqrt(tstep);
-            % apriorierror2(:,3) = errtmp(:,3) + tsTr*sqrt(tstep);
-            % apriorierror2(:,4) = 0;
-            % apriorierror2(:,5) = errtmp(:,5) + tsVi*sqrt(tstep);
-            % apriorierror2(:,6) = errtmp(:,6) + tsOp*sqrt(tstep);
-
             apriorierror2(:,1) = sqrt( errtmp(:,1).^2 + tsNe^2*tstep);
             apriorierror2(:,2) = sqrt( errtmp(:,2).^2 + tsTi^2*tstep);
             apriorierror2(:,3) = sqrt( errtmp(:,3).^2 + tsTr^2*tstep);
@@ -645,9 +641,14 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
             apriorierror2(:,6) = sqrt( errtmp(:,6).^2 + tsOp^2*tstep);
 
         else
-            % if something failed and the smoothed profiles were not copied, we need to use covariance matrices of the unsmoothed data
+            % if something failed we skip the smoothing
             Cpost = Cfit;
             Qpost = Qfit;
+            partmp = r_param;
+            errtmp = r_error;
+
+            % print a warning
+            disp('Smoothing in altitude failed, skipping the smoothing.')
             
         end
         
@@ -688,8 +689,9 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         % copy the parameters smoothed in altitude in matrices that are appended to the data files
         r_param_rcorr = r_param;
         r_param_rcorr(:,1:6) = partmp(:,1:6);
-        r_error_rcorr = r_error;
-        r_error_rcorr(:,1:6) = errtmp(:,1:6);
+        %        r_error_rcorr = r_error;
+        %        r_error_rcorr(:,1:6) = errtmp(:,1:6);
+        r_error_rcorr = errtmp;
         r_param_filter = r_param;
         r_error_filter = r_error;
 
@@ -715,7 +717,6 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
                 end
             end
         end
-        %        disp(itry)
 
 
         % merge the guisdap output files into one large file to avoid too many files...
@@ -723,63 +724,6 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
             merge_mat(result_path,true,true);
         end
 
-
-
-        % figure(10)
-
-        % subplot(2,2,1)
-        % plot(r_param_orig(:,1),heights,'ko')
-        % hold on
-        % plot(r_param_orig(:,1)+r_error_orig(:,1),heights,'b-')
-        % plot(r_param_rcorr(:,1),heights,'r-')
-        % plot(apriori2(:,1)+apriorierror2(:,1),heights,'g-')
-        % xlim([0 1e12])
-        % hold off
-        
-        % subplot(2,2,2)
-        % plot(r_param_orig(:,2),heights,'ko')
-        % hold on
-        % plot(r_param_orig(:,2)+r_error_orig(:,2),heights,'b-')
-        % plot(r_param_rcorr(:,2),heights,'r-')
-        % plot(apriori2(:,2)+apriorierror2(:,2),heights,'g-')
-        % xlim([0 2000])
-        % hold off
-        
-        % % subplot(2,2,3)
-        % % plot(r_param_orig(:,3),heights,'ko')
-        % % hold on
-        % % plot(r_param_orig(:,3)+r_error_orig(:,3),heights,'b-')
-        % % plot(r_param_rcorr(:,3),heights,'r-')
-        % % plot(apriori2(:,3)+apriorierror2(:,3),heights,'g-')
-        % % xlim([0 3])
-        % % hold off
-        % subplot(2,2,3)
-        % plot(r_param_orig(:,3).*r_param_orig(:,2),heights,'ko')
-        % hold on
-        % plot(r_param_orig(:,3).*r_param_orig(:,2)+r_error_orig(:,3).*r_param_orig(:,2) + r_error_orig(:,2).*r_param_orig(:,3),heights,'b-')
-        % plot(r_param_rcorr(:,3).*r_param_rcorr(:,2) + r_param_rcorr(:,2).*r_error_rcorr(:,3) + r_param_rcorr(:,3).*r_error_rcorr(:,2),heights,'r-')
-        % plot(apriori2(:,3).*apriori2(:,2)+apriorierror2(:,3).*apriori2(:,2)+apriorierror(:,2).*apriori2(:,3),heights,'g-')
-        % xlim([0 2000])
-        % hold off
-        
-        % subplot(2,2,4)
-        % plot(r_param_orig(:,5),heights,'ko')
-        % hold on
-        % plot(r_param_orig(:,5)+r_error_orig(:,5),heights,'b-')
-        % plot(r_param_rcorr(:,5),heights,'r-')
-        % plot(apriori2(:,5)+apriorierror2(:,5),heights,'g-')
-        % xlim([-1 1]*200)
-        % hold off
-
-        
-        
-        % for ihei=1:nhei
-        %     disp(heights(ihei))
-        %     disp(r_error_orig(ihei,[1,2,3,5]))
-        %     disp(r_error_rcorr(ihei,[1,2,3,5]))
-        %     disp(apriorierror2(ihei,[1,2,3,5]))
-        % end
-        
     else
         % Prior for the very first time step or after a long data gap from the IRI model. apriori2 already contains the IRI parameters, except for Ne which might be from power profiles, just form the error array here.
 
@@ -791,7 +735,7 @@ function [apriori2,apriorierror2] = apriorimodel_bafim_flipchem(apriori,apriorie
         % Ti
         Apriorierror2(:,2) = tsTi*sqrt(tstep);
         apriorierror2(heights<hlimTi(1),2) = 1e-3;
-        apriorierror2(heights>hlimTi(2),2) = 1e-3;
+         apriorierror2(heights>hlimTi(2),2) = 1e-3;
         % Tr
         apriorierror2(:,3) = tsTr*sqrt(tstep);
         apriorierror2(heights<hlimTr(1),3) = 1e-3;
